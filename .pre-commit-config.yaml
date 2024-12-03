@@ -36,12 +36,14 @@ repos:
     hooks:
       - id: isort
         args: [ "--overwrite-in-place" ]
+        stages: [pre-commit]
 
   - repo: https://github.com/psf/black
     rev: b0d1fba7ac3be53c71fb0d3211d911e629f8aecb # We should always pin the commit hash and not the version, which can be exploited
     hooks:
       - id: black
         args: [ "--line-length=120" ]
+        stages: [pre-commit]
 
   - repo: https://github.com/pycqa/flake8
     rev: b9a7794c4f425ef8419081e6993f99419cc667ea # We should always pin the commit hash and not the version, which can be exploited

@@ -5,6 +5,7 @@ Revises:
 Create Date: 2024-12-01 21:41:12.012388
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -29,7 +30,11 @@ def upgrade() -> None:
         sa.Column("type", sa.Enum("BUY", "SELL", name="ordertype"), nullable=False),
         sa.Column("buy_price", sa.Numeric(precision=10, scale=2), nullable=False),
         sa.Column("sell_price", sa.Numeric(precision=10, scale=2), nullable=True),
-        sa.Column("status", sa.Enum("INITIAL", "CREATED", "EXECUTED", name="orderstatus"), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum("INITIAL", "CREATED", "EXECUTED", name="orderstatus"),
+            nullable=False,
+        ),
         sa.Column("amount", sa.Numeric(precision=10, scale=2), nullable=False),
         sa.Column("filled", sa.Numeric(precision=10, scale=2), nullable=False),
         sa.Column("benefit", sa.Numeric(precision=10, scale=2), nullable=True),

@@ -23,7 +23,7 @@ case "$MODE" in
     ;;
   test)
     echo "Test db connections"
-    poetry run python app/main.py
+    poetry run pytest tests
     ;;
   *)
     echo "Error: Valor no válido para MODE: $MODE"
