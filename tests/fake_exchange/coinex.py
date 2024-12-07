@@ -78,3 +78,12 @@ async def market_deals():
             }
         ],
     }
+
+
+@app.get("/assets/spot/balance")
+async def balance_info():
+    exchange = get_exchange()
+    data = []
+    for balance in exchange.db.get_balances():
+        data.append(balance.get_coinex_data())
+    return {"code": 0, "data": data, "message": "OK"}

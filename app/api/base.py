@@ -1,9 +1,11 @@
 import time
 from abc import ABC, abstractmethod
+from decimal import Decimal
 
 import requests
 
 from app.config.config import Config
+from app.models.balance import Balance
 from app.models.price import Price
 
 
@@ -61,6 +63,18 @@ class BaseApi(ABC):
     @abstractmethod
     def fetch_price(self) -> Price:
         raise NotImplementedError()
+
+    @abstractmethod
+    def fetch_currency_price(self, currency) -> Decimal:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_balances(self) -> dict[str, Balance]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def order_pending(self, market: str, page: int = 1, limit: int = 100, **params):
+        raise NotImplementedError
 
     @abstractmethod
     def create_buy_order(self, symbol: str, amount: float, price: float):

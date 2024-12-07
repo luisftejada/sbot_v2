@@ -1,6 +1,8 @@
+import datetime
 from enum import Enum as PyEnum
 from typing import Optional
 
+from pydantic import BaseModel
 from sqlalchemy import DateTime, Enum, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,7 +20,7 @@ class OrderStatus(PyEnum):
     EXECUTED = "executed"
 
 
-class Order(Base):
+class DbOrder(Base):
     __tablename__ = "orders"
 
     id: Mapped[str] = mapped_column(String(255), primary_key=True, nullable=False)
@@ -32,3 +34,9 @@ class Order(Base):
     amount: Mapped[Numeric] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
     filled: Mapped[Numeric] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
     benefit: Mapped[Optional[Numeric]] = mapped_column(Numeric(precision=10, scale=2))
+
+
+class Order(BaseModel):
+    id: str | None
+    order_id: str
+    created: datetime.datetime

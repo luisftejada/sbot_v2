@@ -105,14 +105,26 @@ class TestCoinexClient:
         assert data[0].get("deal_id") > 0
 
 
-class TestCoinexApi:
-    def test_fetch_price(self, create_config, get_coinex_client):
-        config = create_config
-        coinex_api = CoinexApi(config)
-        coinex_api.client = get_coinex_client
+@pytest.fixture
+def coinex_api(create_config, get_coinex_client) -> CoinexApi:
+    config = create_config
+    coinex_api = CoinexApi(config)
+    coinex_api.client = get_coinex_client
+    return coinex_api
 
+
+class TestCoinexApi:
+    def test_fetch_price(self, coinex_api):
         price = coinex_api.fetch_price()
         assert price.price > 0
         assert price.date is not None
         assert price.date.tzinfo is not None
         assert price.date.tzinfo == datetime.timezone.utc
+
+    def test_fetch_currency_price(self, coinex_api):
+        price = coinex_api.fetch_currency_price("BTC")
+        assert price > 0
+
+    def test_get_balance_info(self, coinex_api):
+        balances = coinex_api.get_balances()
+        assert len(balances) > 0

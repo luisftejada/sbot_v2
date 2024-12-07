@@ -14,6 +14,9 @@ class Db:
     def get_balance(self, currency: str) -> Balance:
         return self.balances.get(currency)
 
+    def get_balances(self):
+        return self.balances.values()
+
     def increase_balance(self, currency: str, amount: Decimal):
         balance = self.balances.get(currency)
         if balance is None:

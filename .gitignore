@@ -2,3 +2,5 @@
 .env-docker
 .config/
 **/__pycache__/
+**/__pycache__/**
+.vscode

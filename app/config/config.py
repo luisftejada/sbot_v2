@@ -26,6 +26,11 @@ class Config(BaseModel):
     decimals: ExchangeDecimals
     client: ClientCredentials
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._currency_from, self._currency_to = self.pair.split("/")
+        self._currencies = set([self._currency_from, self._currency_to, "BTC", "USDT", "USDC"])
+
     def rnd_price(self, price: Decimal) -> Decimal:
         price_decimals = self.decimals.pairs[self.symbol].price
         return rnd(price, price_decimals)
@@ -37,6 +42,18 @@ class Config(BaseModel):
     @property
     def symbol(self) -> str:
         return self.pair.replace("/", "").upper()
+
+    @property
+    def currencies(self):
+        return self._currencies
+
+    @property
+    def currency_from(self):
+        return self._currency_from
+
+    @property
+    def currency_to(self):
+        return self._currency_to
 
 
 def read_decimals_from_yaml(file_path: str) -> MarketDecimals:
