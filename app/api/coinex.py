@@ -5,6 +5,7 @@ from app.api.base import BaseApi
 from app.api.client.coinex import CoinexClient
 from app.config.config import Config
 from app.models.balance import Balance
+from app.models.order import DbOrder, Order
 from app.models.price import Price
 
 
@@ -60,7 +61,20 @@ class CoinexApi(BaseApi):
         return return_balances
 
     def order_pending(self, market: str, page: int = 1, limit: int = 100, **params):
-        pass
+        exchange_orders = self._execute(self.client.order_pending, self.config.symbol)
+        if exchange_orders is None:
+            return []
+
+        orders = []
+        for order in exchange_orders.get("data", []):
+            new_order = Order.create_from_coinex(self.config, order)
+            found = DbOrder.get_by_order_id(new_order.order_id)
+            if found:
+                orders.append(found)
+            else:
+                new_order.save()
+                orders.append(new_order)
+        return orders
 
     def create_buy_order(self, symbol, amount, price):
         pass

@@ -1,6 +1,7 @@
 .env
 .env-docker
 .config/
-**/__pycache__/
-**/__pycache__/**
+*.pyc
 .vscode
+.env-local
+.env-docker
