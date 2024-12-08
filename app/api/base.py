@@ -77,5 +77,5 @@ class BaseApi(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_buy_order(self, symbol: str, amount: float, price: float):
+    def create_buy_order(self, symbol: str, amount: Decimal, price: Decimal):
         raise NotImplementedError

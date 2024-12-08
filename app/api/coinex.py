@@ -76,5 +76,8 @@ class CoinexApi(BaseApi):
                 orders.append(new_order)
         return orders
 
-    def create_buy_order(self, symbol, amount, price):
-        pass
+    def create_buy_order(self, symbol: str, amount: Decimal, price: Decimal):
+        am = self.config.rnd_amount(amount, cls=float)
+        pr = self.config.rnd_price(price, cls=float)
+
+        print(pr, am)

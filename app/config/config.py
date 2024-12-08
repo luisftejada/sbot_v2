@@ -31,13 +31,13 @@ class Config(BaseModel):
         self._currency_from, self._currency_to = self.pair.split("/")
         self._currencies = set([self._currency_from, self._currency_to, "BTC", "USDT", "USDC"])
 
-    def rnd_price(self, price: Decimal) -> Decimal:
+    def rnd_price(self, price: Decimal, cls: type = Decimal) -> Decimal:
         price_decimals = self.decimals.pairs[self.symbol].price
         return rnd(price, price_decimals)
 
-    def rnd_amount(self, amount: Decimal) -> Decimal:
+    def rnd_amount(self, amount: Decimal, cls: type = Decimal) -> Decimal:
         amount_decimals = self.decimals.pairs[self.symbol].amount
-        return rnd(amount, amount_decimals)
+        return rnd(amount, amount_decimals, cls=cls)
 
     @property
     def symbol(self) -> str:

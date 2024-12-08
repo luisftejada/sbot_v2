@@ -29,5 +29,5 @@ class BinanceApi(BaseApi):
     def order_pending(self, market: str, page: int = 1, limit: int = 100, **params):
         pass
 
-    def create_buy_order(self, symbol, amount, price):
+    def create_buy_order(self, symbol: str, amount: Decimal, price: Decimal):
         pass
