@@ -60,17 +60,17 @@ class DbOrder(Base):
 
     order_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, primary_key=True)
     created: Mapped[DateTime] = mapped_column(DateTime, nullable=False)
-    executed: Mapped[Optional[DateTime]] = mapped_column(DateTime)
+    executed: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
     type: Mapped[OrderType] = mapped_column(Enum(OrderType), nullable=False)
-    buy_price: Mapped[Numeric] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
-    sell_price: Mapped[Optional[Numeric]] = mapped_column(Numeric(precision=10, scale=2))
+    buy_price: Mapped[Numeric] = mapped_column(Numeric(precision=10, scale=2), nullable=True)
+    sell_price: Mapped[Optional[Numeric]] = mapped_column(Numeric(precision=10, scale=2), nullable=True)
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), nullable=False, default=OrderStatus.INITIAL)
     amount: Mapped[Numeric] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
-    filled: Mapped[Numeric] = mapped_column(Numeric(precision=10, scale=2), nullable=False)
-    benefit: Mapped[Optional[Numeric]] = mapped_column(Numeric(precision=10, scale=2))
+    filled: Mapped[Numeric] = mapped_column(Numeric(precision=10, scale=2), nullable=True)
+    benefit: Mapped[Optional[Numeric]] = mapped_column(Numeric(precision=10, scale=2), nullable=True)
 
     @classmethod
-    def get_by_order_id(cls, order_id: str) -> "DbOrder" | None:
+    def get_by_order_id(cls, order_id: str) -> Optional["DbOrder"]:
         with Session(engine) as session:
             try:
                 return session.query(DbOrder).filter_by(order_id=order_id).one()
@@ -82,7 +82,7 @@ class Order(BaseModel):
     order_id: str
     created: datetime.datetime
     executed: datetime.datetime | None
-    type: OrderStatus
+    type: OrderType
     buy_price: Decimal | None
     sell_price: Decimal | None
     status: OrderStatus
@@ -107,8 +107,8 @@ class Order(BaseModel):
 
     @classmethod
     def create_from_coinex(cls, config: Config, coinex_data: Any) -> "Order":
-        date = datetime.datetime.fromtimestamp(coinex_data.get("create_time"))
-        order_type = OrderType.from_value(coinex_data.get("type"))
+        date = datetime.datetime.fromtimestamp(coinex_data.get("created_at") // 1000)
+        order_type = OrderType.from_value(coinex_data.get("side"))
         buy_price: Decimal | None = None
         sell_price: Decimal | None = None
         match order_type:
@@ -122,7 +122,7 @@ class Order(BaseModel):
                 raise OrderTypeError(f"worng order type: {order_type}")
 
         return cls(
-            order_id=coinex_data.get("id"),
+            order_id=str(coinex_data.get("order_id")),
             created=date,
             executed=None,
             type=order_type,
@@ -142,13 +142,13 @@ class Order(BaseModel):
         with Session(engine) as session:
             stmt = insert(DbOrder).values(data)
             upsert_stmt = stmt.on_duplicate_key_update(
-                executed=stmt.executed,
-                buy_price=stmt.buy_price,
-                sell_price=stmt.sell_price,
-                status=stmt.status,
-                amount=stmt.amount,
-                filled=stmt.filled,
-                benefit=stmt.benefit,
+                executed=data.get("executed"),
+                buy_price=data.get("buy_price"),
+                sell_price=data.get("sell_price"),
+                status=data.get("status"),
+                amount=data.get("amount"),
+                filled=data.get("filled"),
+                benefit=data.get("benefit"),
             )
             session.execute(upsert_stmt)
             session.commit()

@@ -2,6 +2,7 @@ import datetime
 import os
 import tempfile
 import time
+from decimal import Decimal
 from threading import Thread
 from unittest import mock
 
@@ -9,11 +10,15 @@ import pytest
 import requests
 import uvicorn
 import yaml
+from dotenv import load_dotenv
 
 from app.api.client.coinex import CoinexClient
 from app.api.coinex import CoinexApi
 from app.config.config import read_config_from_yaml
-from tests.fake_exchange.coinex import app
+from app.models.order import DbOrder
+from tests.fake_exchange.coinex import app, get_exchange
+
+load_dotenv(".env-tests")
 
 
 class CoinexClientTest(CoinexClient):
@@ -113,6 +118,30 @@ def coinex_api(create_config, get_coinex_client) -> CoinexApi:
     return coinex_api
 
 
+@pytest.fixture
+def db_session():
+    CONNECT_URL = os.environ.get("DATABASE_CONNECT")
+    DATABASE_NAME = os.environ.get("DATABASE_NAME")
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.config.database import Base
+
+    DATABASE_URL = f"{CONNECT_URL}/{DATABASE_NAME}"
+    engine = create_engine(DATABASE_URL)
+    print(DATABASE_URL)
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    yield session
+
+    # Teardown
+    session.close()
+    # Base.metadata.drop_all(bind=engine)
+
+
 class TestCoinexApi:
     def test_fetch_price(self, coinex_api):
         price = coinex_api.fetch_price()
@@ -126,5 +155,18 @@ class TestCoinexApi:
         assert price > 0
 
     def test_get_balance_info(self, coinex_api):
+        fake_exchange = get_exchange()
+        fake_exchange.add_balance("BTC", Decimal(1))
         balances = coinex_api.get_balances()
         assert len(balances) > 0
+        assert balances.get("BTC").available_amount == Decimal(1)
+
+    def test_open_orders(self, coinex_api, db_session):
+        fake_exchange = get_exchange()
+        fake_exchange.db.add_buy_order("BTC", "0.5", "99000")
+        orders = coinex_api.order_pending("BTCUSDT")
+        db_orders = db_session.query(DbOrder).all()
+        assert len(orders) == 1
+        assert len(db_orders) == 1
+        assert orders[0].order_id == "1"
+        assert db_orders[0].order_id == "1"

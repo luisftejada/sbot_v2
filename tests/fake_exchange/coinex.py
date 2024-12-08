@@ -8,15 +8,16 @@ from decimal import Decimal
 
 from fastapi import FastAPI
 
+from app.models.order import Order
 from app.models.price import Price
-from tests.fake_exchange.db import get_db
+from tests.fake_exchange.db import Db, get_db
 
 app = FastAPI()
 
 
 class CoinexFakeExchange:
     def __init__(self, pair: str, prices_file_path: str = None):  # e.g., "BTC/USDT"
-        self.db = get_db()
+        self.db: Db = get_db(reset=True)
         self.prices_file_path = prices_file_path
         self.pair = pair
         self.prices = self.load_prices()
@@ -38,6 +39,12 @@ class CoinexFakeExchange:
                 prices.append(Price(date=date, price=price))
 
         return prices
+
+    def add_balance(self, currency: str, amount: Decimal):
+        self.db.increase_balance(currency=currency, amount=amount)
+
+    def add_order(self, order: Order):
+        self.db.add_order(order)
 
 
 _exchange = None
@@ -87,3 +94,15 @@ async def balance_info():
     for balance in exchange.db.get_balances():
         data.append(balance.get_coinex_data())
     return {"code": 0, "data": data, "message": "OK"}
+
+
+@app.get("/spot/pending-order")
+async def get_pending_orders():
+    exchange = get_exchange()
+    orders = exchange.db.open_orders
+    return {
+        "code": 0,
+        "data": [exchange.db.as_coinex_order(order) for order in orders],
+        "pagination": {"total": 1, "has_next": False},
+        "message": "OK",
+    }

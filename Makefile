@@ -57,6 +57,7 @@ setup-mariadb:
 	   --network $(NETWORK) \
        --env-file .env \
 	   -v ~/datos/maridadb-vol:/var/lib/mysql \
+	   -v $(pwd)/my.cnf:/etc/mysql/conf.d/my.cnf \
 	   -p 3306:3306 \
 	   mariadb:latest
 

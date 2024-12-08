@@ -55,8 +55,8 @@ class CoinexApi(BaseApi):
                 bal = balances.get(currency)
                 return_balances[currency] = Balance(
                     currency=currency,
-                    total=Decimal(bal.get("available")) + Decimal(bal.get("frozen")),
-                    locked=Decimal(bal.get("frozen")),
+                    available_amount=Decimal(bal.get("available")) + Decimal(bal.get("frozen")),
+                    locked_amount=Decimal(bal.get("frozen")),
                 )
         return return_balances
 
@@ -66,7 +66,7 @@ class CoinexApi(BaseApi):
             return []
 
         orders = []
-        for order in exchange_orders.get("data", []):
+        for order in exchange_orders:
             new_order = Order.create_from_coinex(self.config, order)
             found = DbOrder.get_by_order_id(new_order.order_id)
             if found:
