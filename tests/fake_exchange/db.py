@@ -17,6 +17,11 @@ class Db:
         self.order_id = 1
         self.pair = pair
 
+    @property
+    def next_order_id(self) -> str:
+        self.order_id += 1
+        return str(self.order_id - 1)
+
     def set_pair(self, pair: str):
         self.pair = pair
 

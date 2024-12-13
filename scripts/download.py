@@ -5,6 +5,11 @@ from datetime import datetime, timedelta
 import requests
 
 
+def _d(int_date: int) -> str:
+    d = datetime.utcfromtimestamp(int_date / 1000)
+    return f"{d.year}-{d.month:02d}-{d.day:02d} {d.hour:02d}:{d.minute:02d}:{d.second:02d}"
+
+
 def fetch_agg_trades(symbol, start_time, end_time):
     """
     Fetch aggregated trade data from Binance API within a given time range.
@@ -12,9 +17,13 @@ def fetch_agg_trades(symbol, start_time, end_time):
     url = "https://api.binance.com/api/v3/aggTrades"
     all_data = []
 
+    i = 0
     while start_time < end_time:
-        time.sleep(0.1)
-        params = {"symbol": symbol, "startTime": start_time, "endTime": end_time, "limit": 1000}  # Max per request
+        time.sleep(0.2)
+        if i % 10 == 0:
+            print(f"      loading from {_d(start_time)} to {_d(end_time)}...")
+        i += 1
+        params = {"symbol": symbol, "startTime": start_time, "endTime": end_time, "limit": 100000}  # Max per request
         response = requests.get(url, params=params)
         response.raise_for_status()  # Raise an error for HTTP issues
         data = response.json()
@@ -32,7 +41,7 @@ def save_agg_trades_incrementally(data, pair, year, month):
     """
     Save aggregated trade data incrementally to the corresponding file.
     """
-    folder_name = f"{year}_{pair}_aggTrades"
+    folder_name = f"{year}_{pair}"
     os.makedirs(folder_name, exist_ok=True)
 
     file_name = f"{year}_{month:02d}_{pair}.txt"  # noqa: E231

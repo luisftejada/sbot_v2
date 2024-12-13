@@ -188,7 +188,7 @@ class CoinexClient:
         return signed_str
 
     def _v2(self, path, method="get", auth=False, **params):
-        request_timeout = int(params.get("timeout", 10))
+        request_timeout = int(params.get("timeout", 10000))
         if params.get("timeout"):
             del params["timeout"]
 

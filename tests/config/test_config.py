@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 import yaml
 
-from app.config.config import Config, read_config_from_yaml
+from app.config.config import Config
 from app.config.exchange_decimals import ExchangeDecimals
 
 
@@ -58,7 +58,7 @@ def test_read_config_from_yaml_valid(create_valid_data_yaml, create_decimals_fil
         temp_file_path = create_valid_data_yaml
 
         # Leer la configuración del archivo temporal
-        result = read_config_from_yaml(temp_file_path)
+        result = Config.read_config_from_yaml(temp_file_path)
 
         assert isinstance(result, Config)
         assert result.label == "test_label"
@@ -74,4 +74,4 @@ def test_read_config_from_yaml_invalid(create_invalid_data_yaml, create_decimals
 
         # Validar que lanza una excepción
         with pytest.raises(Exception):
-            read_config_from_yaml(temp_file_path)
+            Config.read_config_from_yaml(temp_file_path)

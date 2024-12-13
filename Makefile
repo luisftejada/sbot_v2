@@ -51,6 +51,8 @@ run-tests:
 	--rm -it $(IMAGE_NAME):$(TAG)
 
 setup-mariadb:
+	docker stop mariadb &&  \
+	docker rm mariadb && \
 	sudo systemctl stop mysql && \
 	docker run -d \
 	   --name mariadb \

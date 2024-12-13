@@ -1,6 +1,5 @@
 import os
 from decimal import Decimal
-from typing import List
 
 import yaml
 from pydantic import BaseModel
@@ -55,6 +54,22 @@ class Config(BaseModel):
     def currency_to(self):
         return self._currency_to
 
+    # Función para leer el archivo YAML y parsearlo a la clase Pydantic
+    @classmethod
+    def read_config_from_yaml(cls, file_path: str) -> "Config":
+        with open(file_path, "r") as file:
+            data = yaml.safe_load(file)
+            decimals = read_decimals_from_yaml(get_decimals_file(data))
+            match data.get("exchange", ""):
+                case "binance":
+                    data["decimals"] = decimals.binance
+                case "coinex":
+                    data["decimals"] = decimals.coinex
+                case _:
+                    raise MarketDecimalsUndefined(f"Exchange {data.get('exchange')} not in decimals file")  # noqa E713
+
+            return cls(**data, client=get_client_credentials(data["exchange"], data["label"]))
+
 
 def read_decimals_from_yaml(file_path: str) -> MarketDecimals:
     with open(file_path, "r") as file:
@@ -62,8 +77,11 @@ def read_decimals_from_yaml(file_path: str) -> MarketDecimals:
         return MarketDecimals(**data)
 
 
-def get_decimals_file() -> str:
-    return os.environ.get("DECIMALS_FILE", "")
+def get_decimals_file(data: dict) -> str:
+    if "decimals_file_path" in data:
+        return data["decimals_file_path"]
+    else:
+        return os.environ.get("DECIMALS_FILE", "")
 
 
 def get_client_credentials(exchange: str, label: str) -> ClientCredentials:
@@ -80,19 +98,3 @@ def get_client_credentials(exchange: str, label: str) -> ClientCredentials:
         raise ValueError(f"Environment secret_key variable for {exchange} and {label} not found")
 
     return ClientCredentials(key=key, secret=secret)
-
-
-# Función para leer el archivo YAML y parsearlo a la clase Pydantic
-def read_config_from_yaml(file_path: str) -> List[Config]:
-    with open(file_path, "r") as file:
-        data = yaml.safe_load(file)
-        decimals = read_decimals_from_yaml(get_decimals_file())
-        match data.get("exchange", ""):
-            case "binance":
-                data["decimals"] = decimals.binance
-            case "coinex":
-                data["decimals"] = decimals.coinex
-            case _:
-                raise MarketDecimalsUndefined(f"Exchange {data.get('exchange')} not in decimals file")  # noqa E713
-
-        return Config(**data, client=get_client_credentials(data["exchange"], data["label"]))

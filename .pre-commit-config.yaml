@@ -49,4 +49,4 @@ repos:
     rev: b9a7794c4f425ef8419081e6993f99419cc667ea # We should always pin the commit hash and not the version, which can be exploited
     hooks:
       - id: flake8
-        args: [ "--max-line-length=120", "--ignore=E203,E501,W503" ]
+        args: [ "--max-line-length=120", "--ignore=E203,E501,W503,E231" ]

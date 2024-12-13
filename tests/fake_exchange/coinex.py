@@ -6,55 +6,80 @@ import os
 import signal
 from decimal import Decimal
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
+from pydantic import BaseModel
 
-from app.models.order import Order
+from app.config.config import Config
+from app.models.order import Order, OrderStatus, OrderType
 from app.models.price import Price
 from tests.fake_exchange.db import Db, get_db
+from tests.fixtures import get_exchange
 
+load_dotenv("configurations/test/.env-tests")
 app = FastAPI()
 
 
+class CoinexOrder(Order):
+    market: str
+    market_type: str
+
+    def get_coinex_data(self):
+        return {
+            "order_id": self.order_id,
+            "market": self.market,
+            "market_type": self.market_type,
+            "side": self.type.value,
+            "ccy": self.market.split("/")[0],
+            "amount": f"{self.amount:.8f}",
+        }
+
+
 class CoinexFakeExchange:
-    def __init__(self, pair: str, prices_file_path: str = None):  # e.g., "BTC/USDT"
+    def __init__(self):
         self.db: Db = get_db(reset=True)
-        self.prices_file_path = prices_file_path
-        self.pair = pair
-        self.prices = self.load_prices()
+        self.prices = []
         self.index = 0
+        self.config = None
+        self.prices = []
+
+    def set_config(self, config: Config):
+        self.config = config
+        self.pair = config.pair
+        self.prices = self.load_prices()
 
     def load_prices(self):
-        if self.prices_file_path is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            file_name = f"data/{self.pair.replace('/', '_')}.txt"
-            full_path = os.path.join(base_dir, file_name)
-        else:
-            full_path = self.prices_file_path
-        prices = []
-        with open(full_path) as f:
-            for line in f.readlines():
-                date = datetime.datetime.fromisoformat(line.split(",")[0])
-                date.replace(tzinfo=datetime.timezone.utc)
-                price = Decimal(line.split(",")[1])
-                prices.append(Price(date=date, price=price))
+        prices_folder = os.environ.get("DATAPATH")
+        if not os.path.exists(prices_folder):
+            raise RuntimeError("can't find DATAPATH = {prices_folder}")
 
-        return prices
+        self.data_files = sorted(os.listdir(prices_folder))
+        self.current_file = self.data_files[0]
+
+    def load_file_of_prices(self):
+        with open(self.current_file, "r") as file:
+            self.prices = [line.split(",") for line in file.readlines()]
+
+    def get_current_price(self) -> Price:
+        if len(self.prices) == 0:
+            self.load_file_of_prices()
+            self.index = 0
+
+        line = self.prices[self.index]
+        new_price = False
+        while not new_price:
+            try:
+                new_price = Price(price=Decimal(line[1]), date=datetime.datetime.fromisoformat(line[0]))
+            except Exception:
+                self.index += 1
+                line = self.prices[self.index]
+        return new_price
 
     def add_balance(self, currency: str, amount: Decimal):
         self.db.increase_balance(currency=currency, amount=amount)
 
     def add_order(self, order: Order):
         self.db.add_order(order)
-
-
-_exchange = None
-
-
-def get_exchange():
-    global _exchange
-    if _exchange is None:
-        _exchange = CoinexFakeExchange(pair="BTC/USDT")
-    return _exchange
 
 
 @app.get("/healthcheck")
@@ -106,3 +131,34 @@ async def get_pending_orders():
         "pagination": {"total": 1, "has_next": False},
         "message": "OK",
     }
+
+
+class SpotOrderRequest(BaseModel):
+    market: str
+    market_type: str
+    side: OrderType
+    price: Decimal
+    amount: Decimal
+    created: datetime.datetime
+    type: str
+
+
+@app.post("/spot/order")
+async def limit_order(order: SpotOrderRequest):
+    exchange = get_exchange()
+    order = Order(
+        order_id=exchange.db.next_order_id,
+        created=order.created,
+        executed=None,
+        type=order.side,
+        buy_price=order.price if order.side == OrderType.BUY else None,
+        sell_price=order.price if order.side == OrderType.SELL else None,
+        status=OrderStatus.INITIAL,
+        amount=order.amount,
+        filled=None,
+        benefit=None,
+        market=order.market,
+        market_type=order.market_type,
+    )
+    exchange.add_order(order)
+    return {"code": 0, "data": order.get_coinex_data(), "message": "OK"}
