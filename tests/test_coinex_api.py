@@ -4,7 +4,10 @@ from decimal import Decimal
 from dotenv import load_dotenv
 
 from app.models.order import DbOrder
-from tests.fake_exchange.coinex import get_exchange
+from tests.conftest import get_exchange
+
+# from tests.fake_exchange.test_fake_exchange import get_coinex_client, start_test_server
+
 
 load_dotenv("configurations/test/.env-tests")
 

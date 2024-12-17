@@ -3,21 +3,17 @@ This is a fake exchange module for testing purposes.
 """
 import datetime
 import os
-import signal
 from decimal import Decimal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.config.config import Config
-from app.models.order import Order, OrderStatus, OrderType
+from app.models.order import Order, OrderType
 from app.models.price import Price
 from tests.fake_exchange.db import Db, get_db
-from tests.fixtures import get_exchange
 
 load_dotenv("configurations/test/.env-tests")
-app = FastAPI()
 
 
 class CoinexOrder(Order):
@@ -103,54 +99,6 @@ class CoinexFakeExchange:
         self.db.add_order(order)
 
 
-@app.get("/healthcheck")
-async def healthcheck():
-    return {"status": "ok"}
-
-
-@app.get("/shutdown")
-async def shutdown():
-    os.kill(os.getpid(), signal.SIGINT)
-
-
-@app.get("/spot/deals")
-async def market_deals():
-    exchange = get_exchange()
-    price = exchange.get_current_price()
-    return {
-        "code": 0,
-        "data": [
-            {
-                "deal_id": exchange.index,
-                "created_at": int(price.date.timestamp() * 1000),
-                "price": f"{price.price: .2f}",
-                "amount": "1.0",
-            }
-        ],
-    }
-
-
-@app.get("/assets/spot/balance")
-async def balance_info():
-    exchange = get_exchange()
-    data = []
-    for balance in exchange.db.get_balances():
-        data.append(balance.get_coinex_data())
-    return {"code": 0, "data": data, "message": "OK"}
-
-
-@app.get("/spot/pending-order")
-async def get_pending_orders():
-    exchange = get_exchange()
-    orders = exchange.db.open_orders
-    return {
-        "code": 0,
-        "data": [exchange.db.as_coinex_order(order) for order in orders],
-        "pagination": {"total": 1, "has_next": False},
-        "message": "OK",
-    }
-
-
 class SpotOrderRequest(BaseModel):
     market: str
     market_type: str
@@ -159,24 +107,3 @@ class SpotOrderRequest(BaseModel):
     amount: Decimal
     created: datetime.datetime
     type: str
-
-
-@app.post("/spot/order")
-async def limit_order(order: SpotOrderRequest):
-    exchange = get_exchange()
-    order = Order(
-        order_id=exchange.db.next_order_id,
-        created=order.created,
-        executed=None,
-        type=order.side,
-        buy_price=order.price if order.side == OrderType.BUY else None,
-        sell_price=order.price if order.side == OrderType.SELL else None,
-        status=OrderStatus.INITIAL,
-        amount=order.amount,
-        filled=None,
-        benefit=None,
-        market=order.market,
-        market_type=order.market_type,
-    )
-    exchange.add_order(order)
-    return {"code": 0, "data": order.get_coinex_data(), "message": "OK"}

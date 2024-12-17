@@ -1,52 +1,6 @@
-import time
-from threading import Thread
-
-import pytest
 import requests
-import uvicorn
 
-from app.api.client.coinex import CoinexClient
-from tests.fake_exchange.coinex import app
-from tests.fixtures import get_exchange, reset_exchange
-
-
-class CoinexClientTest(CoinexClient):
-    BASE_URL = "http://127.0.0.1:50001/"
-
-
-@pytest.fixture
-def get_coinex_client():
-    client = CoinexClientTest(access_id="test", secret="secret")
-    yield client
-
-
-@pytest.fixture(scope="session", autouse=True)
-def start_test_server():
-    """Inicia el servidor FastAPI en un hilo para las pruebas."""
-
-    def run_server():
-        exchange = get_exchange()  # noqa: F841
-        uvicorn.run(app, host="127.0.0.1", port=50001, log_level="info")
-
-    # Crear y arrancar el hilo
-    server_thread = Thread(target=run_server, daemon=True)
-    server_thread.start()
-
-    # Esperar un momento para asegurarnos de que el servidor arranque
-    for _ in range(10):  # Poll for up to 10 seconds
-        try:
-            response = requests.get(f"{CoinexClientTest.BASE_URL}healthcheck")
-            if response.status_code == 200:
-                break
-        except requests.ConnectionError:
-            time.sleep(1)
-    else:
-        raise RuntimeError("Test server did not start.")
-    yield
-
-    # shutdown the fake server
-    requests.get(f"{CoinexClientTest.BASE_URL}shutdown")
-    reset_exchange()
+from tests.conftest import CoinexClientTest
 
 
 class TestFakeExchange:
