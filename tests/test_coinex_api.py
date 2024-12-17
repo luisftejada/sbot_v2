@@ -30,7 +30,7 @@ class TestCoinexApi:
         price = coinex_api.fetch_currency_price("BTC")
         assert price > 0
 
-    def _test_get_balance_info(self, coinex_api):
+    def test_get_balance_info(self, coinex_api):
         fake_exchange = get_exchange()
         fake_exchange.add_balance("BTC", Decimal(1))
         balances = coinex_api.get_balances()
