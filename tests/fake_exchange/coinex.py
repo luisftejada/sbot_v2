@@ -35,6 +35,10 @@ class CoinexOrder(Order):
         }
 
 
+class StopLongRun(Exception):
+    pass
+
+
 class CoinexFakeExchange:
     def __init__(self):
         self.db: Db = get_db(reset=True)
@@ -42,21 +46,28 @@ class CoinexFakeExchange:
         self.index = 0
         self.config = None
         self.prices = []
+        self.prices_folder = None
+        self.current_file_index = 0
+        self.prices_folder = os.environ.get("DATAPATH")
+        if not os.path.exists(self.prices_folder):
+            raise RuntimeError("can't find DATAPATH = {prices_folder}")
+        self.previous_price = None
+
+        self.data_files = sorted(os.listdir(self.prices_folder))
+        if len(self.data_files) == 0:
+            raise RuntimeError("no data files found in {prices_folder}")
 
     def set_config(self, config: Config):
         self.config = config
         self.pair = config.pair
-        self.prices = self.load_prices()
+        self.load_file_of_prices()
 
-    def load_prices(self):
-        prices_folder = os.environ.get("DATAPATH")
-        if not os.path.exists(prices_folder):
-            raise RuntimeError("can't find DATAPATH = {prices_folder}")
-
-        self.data_files = sorted(os.listdir(prices_folder))
-        self.current_file = self.data_files[0]
+    @property
+    def current_file(self):
+        return os.path.join(self.prices_folder, self.data_files[self.current_file_index])
 
     def load_file_of_prices(self):
+        print(f"loading prices from {self.current_file}")
         with open(self.current_file, "r") as file:
             self.prices = [line.split(",") for line in file.readlines()]
 
@@ -64,15 +75,25 @@ class CoinexFakeExchange:
         if len(self.prices) == 0:
             self.load_file_of_prices()
             self.index = 0
+        elif self.index >= len(self.prices):
+            self.index = 0
+            if self.current_file <= len(self.data_files):
+                self.current_file += 1
+            else:
+                raise StopLongRun()
+            self.load_file_of_prices()
 
         line = self.prices[self.index]
         new_price = False
-        while not new_price:
+        while not new_price or (self.previous_price and self.previous_price.price == new_price.price):
             try:
                 new_price = Price(price=Decimal(line[1]), date=datetime.datetime.fromisoformat(line[0]))
             except Exception:
-                self.index += 1
-                line = self.prices[self.index]
+                pass
+            self.index += 1
+            line = self.prices[self.index]
+
+        self.previous_price = new_price
         return new_price
 
     def add_balance(self, currency: str, amount: Decimal):
@@ -95,10 +116,7 @@ async def shutdown():
 @app.get("/spot/deals")
 async def market_deals():
     exchange = get_exchange()
-    if exchange.index >= len(exchange.prices):
-        exchange.index = 0
-    price = exchange.prices[exchange.index]
-    exchange.index += 1
+    price = exchange.get_current_price()
     return {
         "code": 0,
         "data": [

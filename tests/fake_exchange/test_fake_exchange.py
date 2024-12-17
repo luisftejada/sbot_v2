@@ -7,6 +7,7 @@ import uvicorn
 
 from app.api.client.coinex import CoinexClient
 from tests.fake_exchange.coinex import app
+from tests.fixtures import get_exchange, reset_exchange
 
 
 class CoinexClientTest(CoinexClient):
@@ -24,6 +25,7 @@ def start_test_server():
     """Inicia el servidor FastAPI en un hilo para las pruebas."""
 
     def run_server():
+        exchange = get_exchange()  # noqa: F841
         uvicorn.run(app, host="127.0.0.1", port=50001, log_level="info")
 
     # Crear y arrancar el hilo
@@ -44,6 +46,7 @@ def start_test_server():
 
     # shutdown the fake server
     requests.get(f"{CoinexClientTest.BASE_URL}shutdown")
+    reset_exchange()
 
 
 class TestFakeExchange:
