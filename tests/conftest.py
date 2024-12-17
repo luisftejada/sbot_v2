@@ -33,8 +33,8 @@ def create_config():
 
 
 @pytest.fixture
-def coinex_api(create_config, get_coinex_client) -> CoinexApi:
-    config = create_config
+def coinex_api(get_coinex_client) -> CoinexApi:
+    config = create_config()
     coinex_api = CoinexApi(config)
     coinex_api.client = get_coinex_client
     return coinex_api

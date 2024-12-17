@@ -19,14 +19,14 @@ class TestCoinexClient:
 
 
 class TestCoinexApi:
-    def _test_fetch_price(self, coinex_api):
+    def test_fetch_price(self, coinex_api):
         price = coinex_api.fetch_price()
         assert price.price > 0
         assert price.date is not None
         assert price.date.tzinfo is not None
         assert price.date.tzinfo == datetime.timezone.utc
 
-    def _test_fetch_currency_price(self, coinex_api):
+    def test_fetch_currency_price(self, coinex_api):
         price = coinex_api.fetch_currency_price("BTC")
         assert price > 0
 
