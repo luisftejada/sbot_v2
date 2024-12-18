@@ -22,3 +22,29 @@ def rnd(value, decimals, cls=Decimal, rounding=ROUND_UP):
 
 def abs_diff(v1, v2):
     return abs(v1 - v2)
+
+
+def singleton(cls):
+    instances = {}
+
+    def get_instance(*args, **kwargs):
+        if cls not in instances:
+            instances[cls] = cls(*args, **kwargs)
+        return instances[cls]
+
+    return get_instance
+
+
+@singleton
+class Cls:
+    def __init__(self, value=0):
+        self.value = value
+
+    def inc(self, amount):
+        self.value += amount
+
+    def dec(self, amount):
+        self.value -= amount
+
+    def get(self):
+        return self.value

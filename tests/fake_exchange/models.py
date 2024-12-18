@@ -81,3 +81,15 @@ class BuyOrderResponse(BaseModel):
             "updated_at": order.created.timestamp() * 1000,
         }
         return cls(code=0, data=data)
+
+
+class OrderPendingResponse(BaseModel):
+    code: int = 0
+    data: list[BuyOrderData]
+    pagination: dict[str, Union[int, bool]]
+    message: str = "OK"
+
+    @classmethod
+    def from_orders(cls, orders: list[Order]):
+        data = [BuyOrderData.from_order(order) for order in orders]
+        return cls(code=0, data=data, pagination={"total": len(data), "has_next": False}, message="OK")

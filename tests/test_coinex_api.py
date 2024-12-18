@@ -34,7 +34,7 @@ class TestCoinexApi:
         assert len(balances) > 0
         assert balances.get("BTC").available_amount == Decimal(1)
 
-    def test_create_buy_order(self, coinex_api, db_session, get_database_engine):
+    def test_create_buy_order(self, coinex_api, db_session):
         fake_exchange = get_exchange()
         order = coinex_api.create_buy_order("BTC", "0.5", "99000")
         db_order = db_session.query(DbOrder).first()
@@ -49,9 +49,11 @@ class TestCoinexApi:
         exchange_orders = fake_exchange.get_open_orders()
         assert len(exchange_orders) == 1
 
-    def _test_open_orders(self, coinex_api, db_session):
+    def test_open_orders(self, coinex_api, db_session):
         fake_exchange = get_exchange()
-        fake_exchange.db.add_buy_order("BTC", "0.5", "99000")
+        fake_exchange.reset(db_session=db_session, clean_db=True)
+        order = coinex_api.create_buy_order("BTC", "0.5", "99000")
+        assert order.order_id == "1"
         orders = coinex_api.order_pending("BTCUSDT")
         db_orders = db_session.query(DbOrder).all()
         assert len(orders) == 1

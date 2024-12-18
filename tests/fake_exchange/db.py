@@ -1,20 +1,25 @@
 from decimal import Decimal
 from typing import Dict, List
 
+from app.common.common import singleton
 from app.models.order import Order, OrderStatus, OrderType
 from tests.fake_exchange.models import Balance
 
-_db = None
 
-
+@singleton
 class Db:
-    balances: Dict[str, Balance] = {}
-    open_orders: List[Order] = []
-    completed_orders: List[Order] = []
-
     def __init__(self, pair: str = "BTC/USDT"):
         self.order_id = 1
         self.pair = pair
+        self.balances: Dict[str, Balance] = {}
+        self.open_orders: List[Order] = []
+        self.completed_orders: List[Order] = []
+
+    def reset(self):
+        self.order_id = 1
+        self.balances = {}
+        self.open_orders = []
+        self.completed_orders = []
 
     @property
     def next_order_id(self) -> str:
@@ -93,7 +98,9 @@ class Db:
 
 
 def get_db(reset=False):
-    global _db
-    if _db is None or reset is True:
-        _db = Db()
-    return _db
+    if reset:
+        db = Db()
+        db.reset()
+        return db
+    else:
+        return Db()

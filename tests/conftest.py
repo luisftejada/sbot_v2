@@ -18,6 +18,7 @@ from app.config import database
 from app.config.config import Config
 from app.models.order import Order, OrderStatus, OrderType
 from tests.fake_exchange.coinex import SpotOrderRequest
+from tests.fake_exchange.models import OrderPendingResponse
 
 load_dotenv("configurations/test/.env-tests")
 
@@ -76,33 +77,24 @@ def db_session(get_database_engine):
 
 @pytest.fixture
 def fake_exchange():
-    yield get_fake_exchange()
-
-    reset_exchange()
-
-
-def get_fake_exchange() -> "CoinexFakeExchange":  # noqa: F821
-    from tests.fake_exchange.coinex import CoinexFakeExchange
-
-    exchange = CoinexFakeExchange()
-    config = create_config()
-    exchange.set_config(config)
-    return exchange
-
-
-_exchange = None
+    exchange = get_exchange()
+    yield exchange
+    exchange.reset()
 
 
 def get_exchange():
-    global _exchange
-    if _exchange is None:
-        _exchange = get_fake_exchange()
-    return _exchange
+    from tests.fake_exchange.coinex import CoinexFakeExchange
+
+    exchange = CoinexFakeExchange()
+    if exchange.config is None:
+        config = create_config()
+        exchange.set_config(config)
+    return exchange
 
 
-def reset_exchange():
-    global _exchange
-    _exchange = None
+# def reset_exchange():
+#     global _exchange
+#     _exchange = None
 
 
 @pytest.fixture
@@ -127,7 +119,6 @@ def start_test_server():
 
     # shutdown the fake server
     requests.get(f"{CoinexClientTest.BASE_URL}shutdown")
-    reset_exchange()
 
 
 @app.get("/healthcheck")
@@ -201,3 +192,10 @@ async def limit_order(order_request: SpotOrderRequest):
     else:
         return {}
         # TODO: return exchange.add_sell_order(order).model_dump()
+
+
+@app.get("/spot/pending-order")
+async def order_pending(market: str, page: int = 1, limit: int = 100):
+    exchange = get_exchange()
+    exchange_orders = exchange.db.open_orders
+    return OrderPendingResponse.from_orders(exchange_orders).model_dump()
