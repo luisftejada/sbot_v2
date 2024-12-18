@@ -36,7 +36,7 @@ def create_valid_data_yaml(create_temp_yaml):
     valid_data = {
         "label": "test_label",
         "exchange": "coinex",
-        "pair": "test_pair",
+        "market": "BTCUSDT",
     }
     return create_temp_yaml(valid_data)
 
@@ -47,7 +47,7 @@ def create_invalid_data_yaml(create_temp_yaml):
     invalid_data = {
         "label": "test_label",
         "exchange": "coinex",
-        # Falta "pair"
+        # Falta "market"
     }
     return create_temp_yaml(invalid_data)
 
@@ -63,7 +63,7 @@ def test_read_config_from_yaml_valid(create_valid_data_yaml, create_decimals_fil
         assert isinstance(result, Config)
         assert result.label == "test_label"
         assert result.exchange == "coinex"
-        assert result.pair == "test_pair"
+        assert result.market == "BTCUSDT"
         assert isinstance(result.decimals, ExchangeDecimals)
 
 

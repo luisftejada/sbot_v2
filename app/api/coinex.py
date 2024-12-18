@@ -28,7 +28,7 @@ class CoinexApi(BaseApi):
     def fetch_price(self) -> Price:
         price = self.previous_price
         while price == self.previous_price:
-            deals = self._execute(self.client.market_deals, self.config.symbol, limit=1, rate=Decimal(1))
+            deals = self._execute(self.client.market_deals, self.config.market, limit=1, rate=Decimal(1))
             if deals:
                 price = self.config.rnd_price(Decimal(deals[0].get("price")))
         self.previous_price = price
@@ -61,7 +61,7 @@ class CoinexApi(BaseApi):
         return return_balances
 
     def order_pending(self, market: str, page: int = 1, limit: int = 100, **params):
-        exchange_orders = self._execute(self.client.order_pending, self.config.symbol)
+        exchange_orders = self._execute(self.client.order_pending, self.config.market)
         if exchange_orders is None:
             return []
 
@@ -76,8 +76,10 @@ class CoinexApi(BaseApi):
                 orders.append(new_order)
         return orders
 
-    def create_buy_order(self, symbol: str, amount: Decimal, price: Decimal):
+    def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
         am = self.config.rnd_amount(amount, cls=float)
         pr = self.config.rnd_price(price, cls=float)
-
-        print(pr, am)
+        created = self._execute(self.client.order_limit, market, "buy", am, pr)
+        new_order = Order.create_from_coinex(self.config, created)
+        new_order.save()
+        return new_order

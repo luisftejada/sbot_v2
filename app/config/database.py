@@ -13,8 +13,17 @@ load_dotenv(env_file, override=True)
 DATABASE_URL = os.environ.get("DATABASE_SBOTV2_DB_URL", "")
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
+
+
+def get_engine():
+    global engine
+    return engine
+
+
+def set_engine(new_engine):
+    global engine
+    engine = new_engine
 
 
 commands_to_add_new_user = """

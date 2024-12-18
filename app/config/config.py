@@ -31,15 +31,15 @@ class Config(BaseModel):
         self._currencies = set([self._currency_from, self._currency_to, "BTC", "USDT", "USDC"])
 
     def rnd_price(self, price: Decimal, cls: type = Decimal) -> Decimal:
-        price_decimals = self.decimals.pairs[self.symbol].price
+        price_decimals = self.decimals.pairs[self.market].price
         return rnd(price, price_decimals)
 
     def rnd_amount(self, amount: Decimal, cls: type = Decimal) -> Decimal:
-        amount_decimals = self.decimals.pairs[self.symbol].amount
+        amount_decimals = self.decimals.pairs[self.market].amount
         return rnd(amount, amount_decimals, cls=cls)
 
     @property
-    def symbol(self) -> str:
+    def market(self) -> str:
         return self.pair.replace("/", "").upper()
 
     @property

@@ -9,9 +9,10 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from app.config.config import Config
-from app.models.order import Order, OrderType
+from app.models.order import Order
 from app.models.price import Price
 from tests.fake_exchange.db import Db, get_db
+from tests.fake_exchange.models import BuyOrderResponse
 
 load_dotenv("configurations/test/.env-tests")
 
@@ -55,7 +56,7 @@ class CoinexFakeExchange:
 
     def set_config(self, config: Config):
         self.config = config
-        self.pair = config.pair
+        self.market = config.market
         self.load_file_of_prices()
 
     @property
@@ -66,6 +67,10 @@ class CoinexFakeExchange:
         print(f"loading prices from {self.current_file}")
         with open(self.current_file, "r") as file:
             self.prices = [line.split(",") for line in file.readlines()]
+
+    def _get_current_date(self) -> datetime.datetime:
+        line = self.prices[self.index]
+        return datetime.datetime.fromisoformat(line[0])
 
     def get_current_price(self) -> Price:
         if len(self.prices) == 0:
@@ -95,15 +100,31 @@ class CoinexFakeExchange:
     def add_balance(self, currency: str, amount: Decimal):
         self.db.increase_balance(currency=currency, amount=amount)
 
-    def add_order(self, order: Order):
-        self.db.add_order(order)
+    def add_buy_order(self, order: Order) -> BuyOrderResponse:
+        self.db.add_buy_order(buy_order=order)
+        response = BuyOrderResponse.from_order(order=order)
+        return response
+
+    def get_open_orders(self):
+        return self.db.open_orders
+
+
+class UnkonwnMarketException(Exception):
+    pass
 
 
 class SpotOrderRequest(BaseModel):
     market: str
     market_type: str
-    side: OrderType
+    side: str
+    type: str
     price: Decimal
     amount: Decimal
-    created: datetime.datetime
-    type: str
+
+    @property
+    def pair(self) -> str:
+        for currency in ["USDT", "BTC", "USDC"]:
+            if currency in self.market:
+                return f"{self.market.replace(currency, " ")}/{currency}"
+
+        raise UnkonwnMarketException(f"Unknown market {self.market}")

@@ -4,6 +4,7 @@ from decimal import Decimal
 from app.api.base import BaseApi
 from app.api.client.binance import BinanceClient
 from app.models.balance import Balance
+from app.models.order import Order
 from app.models.price import Price
 
 NullPrice = Price(date=datetime.datetime.now(datetime.timezone.utc), price=0)
@@ -29,5 +30,5 @@ class BinanceApi(BaseApi):
     def order_pending(self, market: str, page: int = 1, limit: int = 100, **params):
         pass
 
-    def create_buy_order(self, symbol: str, amount: Decimal, price: Decimal):
-        pass
+    def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        return Order()

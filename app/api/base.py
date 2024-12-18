@@ -6,6 +6,7 @@ import requests
 
 from app.config.config import Config
 from app.models.balance import Balance
+from app.models.order import Order
 from app.models.price import Price
 
 
@@ -77,5 +78,5 @@ class BaseApi(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_buy_order(self, symbol: str, amount: Decimal, price: Decimal):
+    def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
         raise NotImplementedError

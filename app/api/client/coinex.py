@@ -6,6 +6,8 @@ import time
 
 import requests
 
+from app.api.client.errors import raiseError
+
 
 class CoinexApiError(Exception):
     pass
@@ -146,7 +148,7 @@ class CoinexClient:
 
         data = resp.json()
         if data["code"] != 0:
-            raise CoinexApiError(f"error({data['code']})={data['message']} path={path} {params}")
+            raiseError(data, data, path, params)
 
         return data["data"], data.get("pagination", {}).get("has_next")
 

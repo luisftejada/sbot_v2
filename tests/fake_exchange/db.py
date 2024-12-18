@@ -1,4 +1,3 @@
-import datetime
 from decimal import Decimal
 from typing import Dict, List
 
@@ -26,7 +25,7 @@ class Db:
         self.pair = pair
 
     @property
-    def symbol(self):
+    def market(self):
         return self.pair.replace("/", "")
 
     def get_balance(self, currency: str) -> Balance:
@@ -42,49 +41,36 @@ class Db:
             self.balances[currency] = balance
         balance.available_amount += amount
 
-    def add_buy_order(self, currency: str, amount: str, price: str, date: datetime.datetime | None = None):
-        buy_order = Order(
-            order_id=str(self.order_id),
-            created=date or datetime.datetime.now(tz=datetime.UTC),
-            executed=None,
-            type=OrderType.BUY,
-            buy_price=Decimal(price),
-            sell_price=None,
-            status=OrderStatus.INITIAL,
-            amount=Decimal(amount),
-            filled=None,
-            benefit=None,
-        )
-        self.order_id += 1
+    def add_buy_order(self, buy_order: Order):
         self._add_order(buy_order)
 
     def _add_order(self, order: Order):
         self.open_orders.append(order)
 
-    def create_buy_order(self, symbol: str, amount: Decimal, price: Decimal):
-        self.add_order(Order(pair=symbol, type=OrderType.BUY, amount=amount, status=OrderStatus.OPEN, price=price))
+    def create_buy_order(self, market: str, amount: Decimal, price: Decimal):
+        self.add_order(Order(market=market, type=OrderType.BUY, amount=amount, status=OrderStatus.OPEN, price=price))
 
-    def create_sell_order(self, symbol: str, amount: Decimal, price: Decimal):
-        self.add_order(Order(pair=symbol, type=OrderType.SELL, amount=amount, status=OrderStatus.OPEN, price=price))
+    def create_sell_order(self, market: str, amount: Decimal, price: Decimal):
+        self.add_order(Order(market=market, type=OrderType.SELL, amount=amount, status=OrderStatus.OPEN, price=price))
 
-    def check_buy_orders(self, symbol: str, price: Decimal):
+    def check_buy_orders(self, market: str, price: Decimal):
         for order in self.open_orders:
-            if order.pair == symbol and order.type == OrderType.BUY and price <= order.price:
+            if order.market == market and order.type == OrderType.BUY and price <= order.price:
                 order.status = OrderStatus.COMPLETED
 
-                balance_from = self.get_balance(symbol.split("/")[0])
+                balance_from = self.get_balance(market.split("/")[0])
                 balance_from.inc(order.amount)
-                balance_to = self.get_balance(symbol.split("/")[1])
+                balance_to = self.get_balance(market.split("/")[1])
                 balance_to.dec(order.amount * order.price)
 
-    def check_sell_orders(self, symbol: str, price: Decimal):
+    def check_sell_orders(self, market: str, price: Decimal):
         for order in self.open_orders:
-            if order.pair == symbol and order.type == OrderType.SELL and price >= order.price:
+            if order.market == market and order.type == OrderType.SELL and price >= order.price:
                 order.status = OrderStatus.COMPLETED
 
-                balance_from = self.get_balance(symbol.split("/")[0])
+                balance_from = self.get_balance(market.split("/")[0])
                 balance_from.dec(order.amount)
-                balance_to = self.get_balance(symbol.split("/")[1])
+                balance_to = self.get_balance(market.split("/")[1])
                 balance_to.inc(order.amount * order.price)
 
     def get_completed_orders(self) -> List[Order]:
@@ -96,7 +82,7 @@ class Db:
     def as_coinex_order(self, order: Order) -> dict[str, str]:
         return {
             "order_id": int(order.order_id),
-            "market": self.symbol,
+            "market": self.market,
             "market_type": "SPOT",
             "type": "limit",
             "side": order.type.value,

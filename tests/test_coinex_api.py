@@ -3,11 +3,8 @@ from decimal import Decimal
 
 from dotenv import load_dotenv
 
-from app.models.order import DbOrder
+from app.models.order import DbOrder, OrderStatus, OrderType
 from tests.conftest import get_exchange
-
-# from tests.fake_exchange.test_fake_exchange import get_coinex_client, start_test_server
-
 
 load_dotenv("configurations/test/.env-tests")
 
@@ -36,6 +33,21 @@ class TestCoinexApi:
         balances = coinex_api.get_balances()
         assert len(balances) > 0
         assert balances.get("BTC").available_amount == Decimal(1)
+
+    def test_create_buy_order(self, coinex_api, db_session, get_database_engine):
+        fake_exchange = get_exchange()
+        order = coinex_api.create_buy_order("BTC", "0.5", "99000")
+        db_order = db_session.query(DbOrder).first()
+        assert order.order_id == "1"
+        assert db_order.order_id == "1"
+        assert db_order.amount == Decimal("0.5")
+        assert db_order.buy_price == Decimal("99000")
+        assert db_order.sell_price is None
+        assert db_order.market == "BTCUSDT"
+        assert db_order.type == OrderType.BUY
+        assert db_order.status == OrderStatus.INITIAL
+        exchange_orders = fake_exchange.get_open_orders()
+        assert len(exchange_orders) == 1
 
     def _test_open_orders(self, coinex_api, db_session):
         fake_exchange = get_exchange()
