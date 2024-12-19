@@ -89,6 +89,7 @@ def get_exchange():
     if exchange.config is None:
         config = create_config()
         exchange.set_config(config)
+    exchange.db.set_config(exchange.config)
     return exchange
 
 
@@ -199,3 +200,14 @@ async def order_pending(market: str, page: int = 1, limit: int = 100):
     exchange = get_exchange()
     exchange_orders = exchange.db.open_orders
     return OrderPendingResponse.from_orders(exchange_orders).model_dump()
+
+
+@app.get("/spot/user-deals")
+async def user_deals(market: str, side: str, page: int = 1, limit: int = 100):
+    exchange = get_exchange()
+    return {
+        "code": 0,
+        "data": [exchange.db.as_coinex_order(order) for order in exchange.db.completed_orders],
+        "pagination": {"total": 1, "has_next": False},
+        "message": "OK",
+    }

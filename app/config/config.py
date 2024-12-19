@@ -38,6 +38,18 @@ class Config(BaseModel):
         amount_decimals = self.decimals.pairs[self.market].amount
         return rnd(amount, amount_decimals, cls=cls)
 
+    def rnd_amount_by_ccy(self, amount: Decimal, currency: str, cls: type = Decimal) -> Decimal:
+        match currency:
+            case "BTC":
+                amount_decimals = 8
+            case "USDT":
+                amount_decimals = 2
+            case "USDC":
+                amount_decimals = 2
+            case _:
+                amount_decimals = 8
+        return rnd(amount, amount_decimals, cls=cls)
+
     @property
     def market(self) -> str:
         return self.pair.replace("/", "").upper()

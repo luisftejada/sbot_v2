@@ -18,11 +18,15 @@ class Balance(BaseModel):
 
     def inc(self, amount: Decimal):
         self.available_amount += amount
+
+    def lock(self, amount: Decimal):
+        self.locked_amount += amount
+
+    def unlock(self, amount: Decimal):
         self.locked_amount -= amount
 
     def dec(self, amount: Decimal):
         self.available_amount -= amount
-        self.locked_amount += amount
 
     def get_coinex_data(self):
         return {"ccy": self.currency, "available": f"{self.available_amount}", "frozen": f"{self.locked_amount}"}

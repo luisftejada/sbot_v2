@@ -60,6 +60,7 @@ class CoinexFakeExchange:
         self.config = config
         self.market = config.market
         self.load_file_of_prices()
+        self.db.set_config(config)
 
     @property
     def current_file(self):
@@ -85,6 +86,9 @@ class CoinexFakeExchange:
         print(f"loading prices from {self.current_file}")
         with open(self.current_file, "r") as file:
             self.prices = [line.split(",") for line in file.readlines()]
+
+    def upload_manual_prices(self, prices: list[list[str]]):
+        self.prices = prices
 
     def _get_current_date(self) -> datetime.datetime:
         line = self.prices[self.index]
@@ -113,6 +117,8 @@ class CoinexFakeExchange:
             line = self.prices[self.index]
 
         self.previous_price = new_price
+        self.db.check_buy_orders(self.market, new_price.price)
+        self.db.check_sell_orders(self.market, new_price.price)
         return new_price
 
     def add_balance(self, currency: str, amount: Decimal):

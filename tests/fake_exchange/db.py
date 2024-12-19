@@ -2,6 +2,7 @@ from decimal import Decimal
 from typing import Dict, List
 
 from app.common.common import singleton
+from app.config.config import Config
 from app.models.order import Order, OrderStatus, OrderType
 from tests.fake_exchange.models import Balance
 
@@ -14,12 +15,17 @@ class Db:
         self.balances: Dict[str, Balance] = {}
         self.open_orders: List[Order] = []
         self.completed_orders: List[Order] = []
+        self.config: Config | None = None
 
     def reset(self):
         self.order_id = 1
         self.balances = {}
         self.open_orders = []
         self.completed_orders = []
+        self.config = None
+
+    def set_config(self, config: Config):
+        self.config = config
 
     @property
     def next_order_id(self) -> str:
@@ -46,7 +52,18 @@ class Db:
             self.balances[currency] = balance
         balance.available_amount += amount
 
+    def _get_balances(self, order: Order) -> List[Balance]:
+        return [self.get_balance(order.currency_from()), self.get_balance(order.currency_to())]
+
     def add_buy_order(self, buy_order: Order):
+        balance_from, balance_to = self._get_balances(buy_order)
+        if balance_to is None:
+            raise Exception(f"Balance not found. order={buy_order.model_dump()}")
+        if balance_to.available_amount < self.config.rnd_amount_by_ccy(
+            buy_order.amount * buy_order.buy_price, buy_order.currency_to()
+        ):
+            raise Exception(f"Not enough balance. order={buy_order.model_dump()}, balance={balance_to.model_dump()}")
+        balance_to.lock(self.config.rnd_amount_by_ccy(buy_order.amount * buy_order.buy_price, buy_order.currency_to()))
         self._add_order(buy_order)
 
     def _add_order(self, order: Order):
@@ -59,29 +76,36 @@ class Db:
         self.add_order(Order(market=market, type=OrderType.SELL, amount=amount, status=OrderStatus.OPEN, price=price))
 
     def check_buy_orders(self, market: str, price: Decimal):
+        any_completed = False
         for order in self.open_orders:
-            if order.market == market and order.type == OrderType.BUY and price <= order.price:
-                order.status = OrderStatus.COMPLETED
-
-                balance_from = self.get_balance(market.split("/")[0])
-                balance_from.inc(order.amount)
-                balance_to = self.get_balance(market.split("/")[1])
-                balance_to.dec(order.amount * order.price)
+            if order.market == market and order.type == OrderType.BUY and price <= order.buy_price:
+                order.status = OrderStatus.EXECUTED
+                balance_from, balance_to = self._get_balances(order)
+                balance_to.unlock(self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to()))
+                balance_to.dec(self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to()))
+                balance_from.inc(self.config.rnd_amount(order.amount))
+                any_completed = True
+        if any_completed:
+            self.update_completed_orders(OrderType.BUY)
 
     def check_sell_orders(self, market: str, price: Decimal):
+        any_completed = False
         for order in self.open_orders:
-            if order.market == market and order.type == OrderType.SELL and price >= order.price:
-                order.status = OrderStatus.COMPLETED
+            if order.market == market and order.type == OrderType.SELL and price >= order.sell_price:
+                order.status = OrderStatus.EXECUTED
 
-                balance_from = self.get_balance(market.split("/")[0])
+                balance_from = self.get_balance(order.currency_from())
                 balance_from.dec(order.amount)
-                balance_to = self.get_balance(market.split("/")[1])
-                balance_to.inc(order.amount * order.price)
+                balance_to = self.get_balance(order.currency_to())
+                balance_to.inc(order.amount * order.sell_price)
+                any_completed = True
+        if any_completed:
+            self.update_completed_orders(OrderType.SELL)
 
-    def get_completed_orders(self) -> List[Order]:
-        completed = [order for order in self.open_orders if order.status == OrderStatus.COMPLETED]
+    def update_completed_orders(self, side: OrderStatus) -> List[Order]:
+        completed = [order for order in self.open_orders if order.status == OrderStatus.EXECUTED and order.type == side]
         self.completed_orders.extend(completed)
-        self.open_orders = [order for order in self.open_orders if order.status != OrderStatus.COMPLETED]
+        self.open_orders = [order for order in self.open_orders if order.status != OrderStatus.EXECUTED]
         return completed
 
     def as_coinex_order(self, order: Order) -> dict[str, str]:

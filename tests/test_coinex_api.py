@@ -36,7 +36,8 @@ class TestCoinexApi:
 
     def test_create_buy_order(self, coinex_api, db_session):
         fake_exchange = get_exchange()
-        order = coinex_api.create_buy_order("BTC", "0.5", "99000")
+        fake_exchange.add_balance("USDT", Decimal(100000))
+        order = coinex_api.create_buy_order("BTCUSDT", "0.5", "99000")
         db_order = db_session.query(DbOrder).first()
         assert order.order_id == "1"
         assert db_order.order_id == "1"
@@ -52,7 +53,8 @@ class TestCoinexApi:
     def test_open_orders(self, coinex_api, db_session):
         fake_exchange = get_exchange()
         fake_exchange.reset(db_session=db_session, clean_db=True)
-        order = coinex_api.create_buy_order("BTC", "0.5", "99000")
+        fake_exchange.add_balance("USDT", Decimal(100000))
+        order = coinex_api.create_buy_order("BTCUSDT", "0.5", "99000")
         assert order.order_id == "1"
         orders = coinex_api.order_pending("BTCUSDT")
         db_orders = db_session.query(DbOrder).all()
@@ -60,3 +62,22 @@ class TestCoinexApi:
         assert len(db_orders) == 1
         assert orders[0].order_id == "1"
         assert db_orders[0].order_id == "1"
+
+    def test_get_filled(self, coinex_api, db_session):
+        fake_exchange = get_exchange()
+        fake_exchange.reset(db_session=db_session, clean_db=True)
+        fake_exchange.upload_manual_prices(
+            [
+                ["2021-01-01T00:00:00", "100001"],
+                ["2021-01-01T00:00:01", "100000"],
+                ["2021-01-01T00:01:00", "99000"],
+                ["2021-01-01T00:02:00", "98000"],
+            ]
+        )
+        fake_exchange.add_balance("USDT", Decimal(100000))
+        fake_exchange.add_balance("BTC", Decimal(1))
+        order = coinex_api.create_buy_order("BTCUSDT", "0.5", "99000")
+        assert order.order_id == "1"
+        # pass some time to let the exchange execute the buy order
+        for _ in range(3):
+            fake_exchange.get_current_price()
