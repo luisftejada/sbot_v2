@@ -3,6 +3,7 @@ from decimal import Decimal
 from enum import Enum as PyEnum
 from typing import Any, Optional
 
+from boto3.dynamodb.conditions import Key
 from pydantic import BaseModel, PrivateAttr
 
 from app.config.config import Config
@@ -34,7 +35,6 @@ class OrderStatusError(RuntimeError):
 
 class OrderStatus(PyEnum):
     INITIAL = "initial"
-    CREATED = "created"
     EXECUTED = "executed"
 
     @classmethod
@@ -42,8 +42,6 @@ class OrderStatus(PyEnum):
         match value:
             case cls.INITIAL.value:
                 return cls.INITIAL
-            case cls.CREATED.value:
-                return cls.CREATED
             case cls.EXECUTED.value:
                 return cls.EXECUTED
             case _:
@@ -59,8 +57,8 @@ class Order(Record):
     _indexes: list[Index] = PrivateAttr(
         default=[
             Index(
-                partition_key=IndexField(field_name="executed", key_type="HASH"),
-                sort_key=IndexField(field_name="order_id", key_type="RANGE"),
+                partition_key=IndexField(field_name="orderStatus", key_type="HASH"),
+                sort_key=IndexField(field_name="executed", key_type="RANGE"),
             )
         ]
     )
@@ -71,7 +69,7 @@ class Order(Record):
     type: OrderType
     buy_price: Optional[Decimal] = None
     sell_price: Optional[Decimal] = None
-    status: OrderStatus
+    orderStatus: OrderStatus
     amount: Decimal
     filled: Optional[Decimal] = None
     benefit: Optional[Decimal] = None
@@ -79,6 +77,11 @@ class Order(Record):
 
     _currency_from: Optional[str] = PrivateAttr(default=None)
     _currency_to: Optional[str] = PrivateAttr(default=None)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.executed is None:
+            self.executed = self.created
 
     @classmethod
     def create_from_db(cls, db_order: dict) -> "Order":
@@ -91,7 +94,7 @@ class Order(Record):
                 type=parse_value(db_order, "type", OrderType),
                 buy_price=parse_value(db_order, "buy_price", Decimal, default=None),
                 sell_price=parse_value(db_order, "sell_price", Decimal, default=None),
-                status=parse_value(db_order, "status", OrderStatus),
+                orderStatus=parse_value(db_order, "orderStatus", OrderStatus),
                 amount=parse_value(db_order, "amount", Decimal),
                 filled=parse_value(db_order, "filled", Decimal, default=None),
                 benefit=parse_value(db_order, "benefit", Decimal, default=None),
@@ -122,11 +125,11 @@ class Order(Record):
         obj = cls(
             order_id=str(coinex_data.get("order_id")),
             created=date,
-            executed=None,
+            executed=date,
             type=order_type.value,
             buy_price=buy_price,
             sell_price=sell_price,
-            status=OrderStatus.INITIAL,
+            orderStatus=OrderStatus.INITIAL,
             amount=config.rnd_amount(coinex_data.get("amount")),
             filled=None,
             benefit=None,
@@ -155,6 +158,33 @@ class Order(Record):
         if self._currency_to is None:
             self._update_currencies()
         return self._currency_to
+
+    @classmethod
+    def query_by_status(
+        cls,
+        bot: str,
+        orderStatus: OrderStatus,
+        from_date: datetime.datetime | None = None,
+        to_date: datetime.datetime | None = None,
+    ) -> list["Order"]:
+        # Define the table name and index name
+        table = cls._get_table(bot)
+        index_name = "orderStatus_executed_index"
+
+        filter_expression = Key("orderStatus").eq(orderStatus.value)
+        if from_date is not None and to_date is not None:
+            filter_expression &= Key("executed").between(from_date.isoformat(), to_date.isoformat())
+        elif from_date is not None:
+            filter_expression &= Key("executed").gte(from_date.isoformat())
+        elif to_date is not None:
+            filter_expression &= Key("executed").lte(to_date.isoformat())
+        response = table.query(
+            IndexName=index_name,
+            KeyConditionExpression=filter_expression,
+        )
+        # Convert response items into Order instances
+        data = [cls.create_from_db(item) for item in response.get("Items", [])]
+        return data
 
 
 class DbOrder(BaseModel):
