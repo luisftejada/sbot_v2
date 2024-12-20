@@ -6,7 +6,7 @@ WORKDIR /bot
 
 # Instala las dependencias necesarias para Poetry
 RUN apt-get update && \
-    apt-get install -y build-essential curl libmariadb-dev libmariadb-dev-compat mariadb-client && \
+    apt-get install -y build-essential curl && \
     curl -sSL https://install.python-poetry.org | python3 - && \
     ln -s /root/.local/bin/poetry /usr/local/bin/poetry && \
     apt-get clean

@@ -21,10 +21,8 @@ repos:
          name: mypy
          files: '^.*\.py?$'
          entry: mypy --install-types --non-interactive
-         exclude: ^.*\b(alembic|\.venv|\venv|tests)\b.*$
-         additional_dependencies: [
-           "sqlalchemy[mypy]"
-         ]
+         exclude: ^.*\b(\.venv|\venv|tests)\b.*$
+         additional_dependencies: []
 
   - repo: https://github.com/MarcoGorelli/absolufy-imports
     rev: 2b275ea7e0241bf601527d8378dc68d6e31e03e0 # We should always pin the commit hash and not the version, which can be exploited

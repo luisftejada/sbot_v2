@@ -10,11 +10,9 @@ import requests
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from sqlalchemy import create_engine
 
 from app.api.client.coinex import CoinexClient
 from app.api.coinex import CoinexApi
-from app.config import database
 from app.config.config import Config
 from app.models.order import Order, OrderStatus, OrderType
 from tests.fake_exchange.coinex import SpotOrderRequest
@@ -44,37 +42,6 @@ def coinex_api(get_coinex_client) -> CoinexApi:
     return coinex_api
 
 
-@pytest.fixture(scope="session", autouse=True)
-def get_database_engine():
-    load_dotenv("configurations/test/.env-tests")
-    CONNECT_URL = os.environ.get("DATABASE_CONNECT")
-    DATABASE_NAME = os.environ.get("DATABASE_NAME")
-    DATABASE_URL = f"{CONNECT_URL}/{DATABASE_NAME}"
-    engine = create_engine(DATABASE_URL)
-    database.set_engine(engine)
-    with mock.patch.object(database, "get_engine", return_value=engine):
-        yield engine
-
-
-@pytest.fixture
-def db_session(get_database_engine):
-    from sqlalchemy.orm import sessionmaker
-
-    from app.config.database import Base
-
-    engine = get_database_engine
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
-    yield session
-
-    # Teardown
-    session.close()
-    # Base.metadata.drop_all(bind=engine)
-
-
 @pytest.fixture
 def fake_exchange():
     exchange = get_exchange()
@@ -91,11 +58,6 @@ def get_exchange():
         exchange.set_config(config)
     exchange.db.set_config(exchange.config)
     return exchange
-
-
-# def reset_exchange():
-#     global _exchange
-#     _exchange = None
 
 
 @pytest.fixture

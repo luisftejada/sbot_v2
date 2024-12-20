@@ -16,11 +16,6 @@ case "$MODE" in
     # Comandos específicos para el modo desarrollo
     poetry run python app/workers/bot.py
     ;;
-  db-migrate)
-    echo "Run alembic migrations"
-    # Comandos específicos para el modo producción
-    poetry run alembic upgrade head
-    ;;
   test)
     echo "Test db connections"
     poetry run pytest tests

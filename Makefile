@@ -50,19 +50,6 @@ run-tests:
 	--env-file .env \
 	--rm -it $(IMAGE_NAME):$(TAG)
 
-setup-mariadb:
-	docker stop mariadb &&  \
-	docker rm mariadb && \
-	sudo systemctl stop mysql && \
-	docker run -d \
-	   --name mariadb \
-	   --network $(NETWORK) \
-       --env-file .env \
-	   -v ~/datos/maridadb-vol:/var/lib/mysql \
-	   -v $(pwd)/my.cnf:/etc/mysql/conf.d/my.cnf \
-	   -p 3306:3306 \
-	   mariadb:latest
-
 clean-docker:
 	docker stop $$(docker ps -a -q) && docker rm $$(docker ps -a -q) && docker rmi $$(docker images -q)
 
@@ -77,3 +64,13 @@ help:
 	@echo "  run     - Ejecuta un contenedor con la imagen"
 	@echo "  clean   - Limpia imágenes dangling (sin etiquetas)"
 	@echo "  remove  - Elimina la imagen Docker creada"
+
+dynamodb-start:
+	cd "/home/$(USER)/datos/dev/dynamodb"
+	screen -d -m -S dynamodb
+	sleep 1
+	echo "Starting DynamoDB"
+	screen -S dynamodb -X stuff '/home/luis/datos/dev/dynamodb/start.sh\n'
+
+dynamodb-stop:
+	screen -X -S dynamodb kill

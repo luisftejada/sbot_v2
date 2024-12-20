@@ -7,9 +7,6 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-mariadb = "^1.1.11"
-sqlalchemy = "^2.0.36"
-alembic = "^1.14.0"
 python-dotenv = "^1.0.1"
 pymysql = "^1.1.1"
 pre-commit = "^4.0.1"
@@ -20,6 +17,8 @@ fastapi = "^0.115.6"
 requests = "^2.32.3"
 uvicorn = "^0.32.1"
 pytest = "^8.3.4"
+boto3 = "^1.35.84"
+boto3-stubs = "^1.35.85"
 
 [build-system]
 requires = ["poetry-core"]
