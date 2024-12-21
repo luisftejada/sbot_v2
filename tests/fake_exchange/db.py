@@ -1,3 +1,4 @@
+import random
 from decimal import Decimal
 from typing import Dict, List
 
@@ -11,6 +12,7 @@ from tests.fake_exchange.models import Balance
 class Db:
     def __init__(self, pair: str = "BTC/USDT"):
         self.order_id = 1
+        self.fill_id = 1
         self.pair = pair
         self.balances: Dict[str, Balance] = {}
         self.open_orders: List[Order] = []
@@ -23,6 +25,7 @@ class Db:
         self.open_orders = []
         self.completed_orders = []
         self.config = None
+        self.fill_id = 1
 
     def set_config(self, config: Config):
         self.config = config
@@ -79,7 +82,7 @@ class Db:
         any_completed = False
         for order in self.open_orders:
             if order.market == market and order.type == OrderType.BUY and price <= order.buy_price:
-                order.status = OrderStatus.EXECUTED
+                order.orderStatus = OrderStatus.EXECUTED
                 balance_from, balance_to = self._get_balances(order)
                 balance_to.unlock(self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to()))
                 balance_to.dec(self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to()))
@@ -92,7 +95,7 @@ class Db:
         any_completed = False
         for order in self.open_orders:
             if order.market == market and order.type == OrderType.SELL and price >= order.sell_price:
-                order.status = OrderStatus.EXECUTED
+                order.orderStatus = OrderStatus.EXECUTED
 
                 balance_from = self.get_balance(order.currency_from())
                 balance_from.dec(order.amount)
@@ -103,9 +106,11 @@ class Db:
             self.update_completed_orders(OrderType.SELL)
 
     def update_completed_orders(self, side: OrderStatus) -> List[Order]:
-        completed = [order for order in self.open_orders if order.status == OrderStatus.EXECUTED and order.type == side]
+        completed = [
+            order for order in self.open_orders if order.orderStatus == OrderStatus.EXECUTED and order.type == side
+        ]
         self.completed_orders.extend(completed)
-        self.open_orders = [order for order in self.open_orders if order.status != OrderStatus.EXECUTED]
+        self.open_orders = [order for order in self.open_orders if order.orderStatus != OrderStatus.EXECUTED]
         return completed
 
     def as_coinex_order(self, order: Order) -> dict[str, str]:
@@ -119,6 +124,29 @@ class Db:
             "price": str(order.buy_price) if order.type == OrderType.BUY else str(order.sell_price),
             "created_at": order.created.timestamp() * 1000,
         }
+
+    def fills_from_completed_order(self, order: Order) -> list[dict[str, str]]:
+        fills = []
+        splits = random.choice([1, 2, 3])
+        base_amount = order.amount / splits
+        accumulated_amount = Decimal(0)
+        for split in range(splits):
+            fill_amount = self.config.rnd_amount(base_amount)
+            if split == splits - 1:
+                fill_amount = order.amount - accumulated_amount
+            accumulated_amount += fill_amount
+            fill = {
+                "deal_id": self.fill_id,
+                "order_id": int(order.order_id),
+                "market": self.market,
+                "price": str(order.buy_price) if order.type == OrderType.BUY else str(order.sell_price),
+                "amount": str(fill_amount),
+                "side": order.type.value,
+                "created_at": order.created.timestamp() * 1000,
+            }
+            self.fill_id += 1
+            fills.append(fill)
+        return fills
 
 
 def get_db(reset=False):

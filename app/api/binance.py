@@ -1,9 +1,12 @@
 import datetime
 from decimal import Decimal
+from typing import Optional
 
 from app.api.base import BaseApi
 from app.api.client.binance import BinanceClient
 from app.models.balance import Balance
+from app.models.enums import OrderType
+from app.models.filled import Fill
 from app.models.order import Order
 from app.models.price import Price
 
@@ -32,3 +35,6 @@ class BinanceApi(BaseApi):
 
     def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
         return Order()
+
+    def get_filled(self, side: OrderType, fill: Fill | None, pair: Optional[str] = None) -> list[Fill]:
+        return []

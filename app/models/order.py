@@ -1,6 +1,5 @@
 import datetime
 from decimal import Decimal
-from enum import Enum as PyEnum
 from typing import Any, Optional
 
 from boto3.dynamodb.conditions import Key
@@ -8,47 +7,8 @@ from pydantic import PrivateAttr
 
 from app.config.config import Config
 from app.models.common import Index, IndexField, Record, parse_value
-
-
-class OrderTypeError(RuntimeError):
-    pass
-
-
-class OrderType(PyEnum):
-    BUY = "buy"
-    SELL = "sell"
-
-    @classmethod
-    def from_value(cls, value):
-        match value:
-            case cls.BUY.value:
-                return cls.BUY
-            case cls.SELL.value:
-                return cls.SELL
-            case _:
-                raise OrderTypeError(f"Wrong OrderType {value}")
-
-
-class OrderStatusError(RuntimeError):
-    pass
-
-
-class OrderStatus(PyEnum):
-    INITIAL = "initial"
-    EXECUTED = "executed"
-
-    @classmethod
-    def from_value(cls, value):
-        match value:
-            case cls.INITIAL.value:
-                return cls.INITIAL
-            case cls.EXECUTED.value:
-                return cls.EXECUTED
-            case _:
-                raise OrderStatusError(f"wrong OrderStatus {value}")
-
-
-BASIC_CURRENCIES = ["BTC", "USDT", "USDC"]
+from app.models.enums import BASIC_CURRENCIES, OrderStatus, OrderType, OrderTypeError
+from app.models.filled import Fill, fill_parser
 
 
 class Order(Record):
@@ -71,7 +31,7 @@ class Order(Record):
     sell_price: Optional[Decimal] = None
     orderStatus: OrderStatus
     amount: Decimal
-    filled: Optional[Decimal] = None
+    fills: list[Fill] = []
     benefit: Optional[Decimal] = None
     market: str  # Note market does not include /
 
@@ -82,6 +42,22 @@ class Order(Record):
         super().__init__(*args, **kwargs)
         if self.executed is None:
             self.executed = self.created
+
+    @classmethod
+    def get_attribute(cls, field_name: str) -> str:
+        match field_name:
+            case "buy_price":
+                return "N"
+            case "sell_price":
+                return "N"
+            case "amount":
+                return "N"
+            case "fills":
+                return "L"
+            case "benefit":
+                return "N"
+            case _:
+                return "S"
 
     @classmethod
     def create_from_db(cls, db_order: dict) -> "Order":
@@ -96,7 +72,7 @@ class Order(Record):
                 sell_price=parse_value(db_order, "sell_price", Decimal, default=None),
                 orderStatus=parse_value(db_order, "orderStatus", OrderStatus),
                 amount=parse_value(db_order, "amount", Decimal),
-                filled=parse_value(db_order, "filled", Decimal, default=None),
+                fills=parse_value(db_order, "fills", fill_parser, default=[]),
                 benefit=parse_value(db_order, "benefit", Decimal, default=None),
                 market=parse_value(db_order, "market"),
             )
@@ -131,7 +107,7 @@ class Order(Record):
             sell_price=sell_price,
             orderStatus=OrderStatus.INITIAL,
             amount=config.rnd_amount(coinex_data.get("amount")),
-            filled=None,
+            fills=[],
             benefit=None,
             market=_market,
         )

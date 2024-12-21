@@ -6,18 +6,19 @@ from dotenv import load_dotenv
 
 from app.config import dynamodb
 from app.models.common import Record
-from app.models.order import Order, OrderStatus, OrderType
+from app.models.enums import OrderStatus, OrderType
+from app.models.order import Order
 
 load_dotenv("configurations/test/.env-tests")
 
 
 class TestDynamoDb:
-    def test_create_table(self, new_table):
+    def test_create_table(self, new_tables):
         assert "ADA1_orders" in dynamodb.get_dynamodb().meta.client.list_tables().get("TableNames")
         Order.delete_table("ADA1")
         assert "ADA1_orders" not in dynamodb.get_dynamodb().meta.client.list_tables().get("TableNames")
 
-    def test_add_order(self, new_table):
+    def test_add_order(self, new_tables):
         order = Order(
             order_id="1",
             created=datetime.datetime.now(),
@@ -54,7 +55,7 @@ class TestDynamoDb:
                 Order.save("ADA1", order)
             date += datetime.timedelta(days=1)
 
-    def test_fetch_orders(self, new_table):
+    def test_fetch_orders(self, new_tables):
         self._add_orders(10, [OrderStatus.INITIAL, OrderStatus.EXECUTED])
         all_initial_orders = Order.query_by_status("ADA1", OrderStatus.INITIAL)
         assert len(all_initial_orders) == 10

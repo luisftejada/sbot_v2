@@ -3,7 +3,8 @@ from decimal import Decimal
 
 from dotenv import load_dotenv
 
-from app.models.order import Order, OrderStatus, OrderType
+from app.models.enums import OrderStatus, OrderType
+from app.models.order import Order
 from tests.conftest import get_exchange
 
 load_dotenv("configurations/test/.env-tests")
@@ -34,7 +35,7 @@ class TestCoinexApi:
         assert len(balances) > 0
         assert balances.get("BTC").available_amount == Decimal(1)
 
-    def test_create_buy_order(self, coinex_api, new_table):
+    def test_create_buy_order(self, coinex_api, new_tables):
         fake_exchange = get_exchange()
         fake_exchange.add_balance("USDT", Decimal(100000))
         order = coinex_api.create_buy_order("ADAUSDT", "0.5", "99000")
@@ -50,7 +51,7 @@ class TestCoinexApi:
         exchange_orders = fake_exchange.get_open_orders()
         assert len(exchange_orders) == 1
 
-    def test_open_orders(self, coinex_api):
+    def test_open_orders(self, coinex_api, new_tables):
         fake_exchange = get_exchange()
         fake_exchange.reset()
         fake_exchange.add_balance("USDT", Decimal(100000))
@@ -63,15 +64,15 @@ class TestCoinexApi:
         assert orders[0].order_id == "1"
         assert db_orders[0].order_id == "1"
 
-    def test_get_filled(self, coinex_api):
+    def test_get_filled(self, coinex_api, new_tables):
         fake_exchange = get_exchange()
         fake_exchange.reset()
         fake_exchange.upload_manual_prices(
             [
-                ["2021-01-01T00:00:00", "100001"],
-                ["2021-01-01T00:00:01", "100000"],
-                ["2021-01-01T00:01:00", "99000"],
-                ["2021-01-01T00:02:00", "98000"],
+                ["2021-01-01T00:00:00", "101"],
+                ["2021-01-01T00:00:01", "100"],
+                ["2021-01-01T00:01:00", "99"],
+                ["2021-01-01T00:02:00", "98"],
             ]
         )
         fake_exchange.add_balance("USDT", Decimal(100000))
@@ -81,3 +82,6 @@ class TestCoinexApi:
         # pass some time to let the exchange execute the buy order
         for _ in range(3):
             fake_exchange.get_current_price()
+        last_filled = coinex_api.last_fill
+        filled = coinex_api.get_filled(OrderType.BUY, last_filled)
+        assert len(filled) > 0

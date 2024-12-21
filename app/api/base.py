@@ -1,11 +1,14 @@
 import time
 from abc import ABC, abstractmethod
 from decimal import Decimal
+from typing import Optional
 
 import requests
 
 from app.config.config import Config
 from app.models.balance import Balance
+from app.models.enums import OrderType
+from app.models.filled import Fill
 from app.models.order import Order
 from app.models.price import Price
 
@@ -79,4 +82,8 @@ class BaseApi(ABC):
 
     @abstractmethod
     def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_filled(self, side: OrderType, fill: Fill | None, pair: Optional[str] = None) -> list[Fill]:
         raise NotImplementedError

@@ -9,7 +9,7 @@ from pydantic import BaseModel, PrivateAttr
 from app.config.dynamodb import get_dynamodb
 
 
-def parse_value(db_record: dict, key: str, cls: type = str, default: Any = None) -> Any:
+def parse_value(db_record: dict, key: str, cls: Any = str, default: Any = None) -> Any:
     """
     Parse a value from a database record, converting it to the specified type.
 
@@ -72,6 +72,10 @@ class Record(BaseModel):
         return cls._TABLE_NAME.get_default()
 
     @classmethod
+    def get_full_table_name(cls, bot: str):
+        return f"{bot}_{cls.table_name()}"
+
+    @classmethod
     def indexes(cls):
         return cls._indexes.get_default()
 
@@ -86,12 +90,8 @@ class Record(BaseModel):
         return fields
 
     @classmethod
-    def dynamodb_attribute(cls, type_: type) -> str:
-        match type_:
-            case int, float, decimal.Decimal:  # noqa: F841
-                return "N"
-            case _:
-                return "S"
+    def get_attribute(cls, field_name: str) -> str:
+        return "S"
 
     @classmethod
     def get_attribute_definitions(cls):
@@ -102,10 +102,10 @@ class Record(BaseModel):
             attributes.add(index.sort_key.field_name)
 
         attribute_definitions = []
-        for field_name, field_info in cls.model_fields.items():
+        for field_name in cls.model_fields.keys():
             if field_name in attributes:
                 attribute_definitions.append(
-                    {"AttributeName": field_name, "AttributeType": cls.dynamodb_attribute(field_info.annotation)}
+                    {"AttributeName": field_name, "AttributeType": cls.get_attribute(field_name)}
                 )
         return attribute_definitions
 
@@ -131,25 +131,28 @@ class Record(BaseModel):
 
     @classmethod
     def create_table(cls, bot: str) -> None:
-        table_name = f"{bot}_{cls.table_name()}"
+        table_name = cls.get_full_table_name(bot)
         if table_name not in get_dynamodb().meta.client.list_tables().get("TableNames"):
-            table = get_dynamodb().create_table(
-                TableName=table_name,
-                KeySchema=[
+            create_table_arguments = {
+                "TableName": table_name,
+                "KeySchema": [
                     {
                         "AttributeName": cls.key_field(),
                         "KeyType": "HASH",
                     },
                 ],
-                AttributeDefinitions=cls.get_attribute_definitions(),
-                BillingMode="PAY_PER_REQUEST",
-                GlobalSecondaryIndexes=cls.get_index_definitions(),
-            )
+                "AttributeDefinitions": cls.get_attribute_definitions(),
+                "BillingMode": "PAY_PER_REQUEST",
+            }
+            index_definitions = cls.get_index_definitions()
+            if index_definitions:
+                create_table_arguments["GlobalSecondaryIndexes"] = index_definitions
+            table = get_dynamodb().create_table(**create_table_arguments)
             table.meta.client.get_waiter("table_exists").wait(TableName=table_name)
 
     @classmethod
     def delete_table(cls, bot: str) -> None:
-        table_name = f"{bot}_{cls.table_name()}"
+        table_name = cls.get_full_table_name(bot)
         if table_name in get_dynamodb().meta.client.list_tables().get("TableNames"):
             table = get_dynamodb().Table(table_name)
             table.delete()
@@ -157,16 +160,22 @@ class Record(BaseModel):
 
     @classmethod
     def _get_table(cls, bot: str) -> Table:
+        table_name = cls.get_full_table_name(bot)
         if cls._table is None:
-            cls._table = get_dynamodb().Table(f"{bot}_{cls.table_name()}")
+            cls._table = get_dynamodb().Table(table_name)
         return cls._table
 
     @classmethod
-    def get(cls, bot: str, id: str) -> "Record":
+    def get(cls, bot: str, id: str, raise_not_found: bool = False) -> Optional["Record"]:
         table = cls._get_table(bot)
         response = table.get_item(Key={cls.key_field(): id})
         if "Item" not in response:
-            raise cls.NotFoundError(f"Order with {cls.key_field()} {id} not found in the database.")  # noqa: E713
+            if raise_not_found:
+                raise cls.NotFoundError(
+                    f"{cls.__name__} with {cls.key_field()} {id} not found in the database."  # noqa: E713
+                )
+            else:
+                return None
         return cls.create_from_db(response["Item"])
 
     @classmethod

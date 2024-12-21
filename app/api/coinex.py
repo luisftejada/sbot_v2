@@ -1,10 +1,13 @@
 import datetime
 from decimal import Decimal
+from typing import Optional
 
 from app.api.base import BaseApi
 from app.api.client.coinex import CoinexClient
 from app.config.config import Config
 from app.models.balance import Balance
+from app.models.enums import OrderType
+from app.models.filled import DbFill, Fill
 from app.models.order import Order
 from app.models.price import Price
 
@@ -21,6 +24,7 @@ class CoinexApi(BaseApi):
         self.client = CoinexClient(config)
         self.previous_price: Decimal | None = None
         self.config = config
+        self.last_fill = DbFill.get(self.bot_name, self.bot_name)
 
     @property
     def bot_name(self):
@@ -87,3 +91,15 @@ class CoinexApi(BaseApi):
         new_order = Order.create_from_coinex(self.config, created)
         Order.save(self.bot_name, new_order)
         return new_order
+
+    def get_filled(self, side: OrderType, fill: Fill | None, pair: Optional[str] = None) -> list[Fill]:
+        match side:
+            case OrderType.BUY:
+                date_from = fill.buy_date if fill and fill.buy_date else datetime.datetime(2024, 1, 1)
+            case OrderType.SELL:
+                date_from = fill.sell_date if fill and fill.sell_date else datetime.datetime(2024, 1, 1)
+
+        start_time = int(date_from.timestamp())
+        fills = self._execute(self.client.order_user_deals, self.config.market, start_time=start_time)
+        _fills = [Fill.from_coinex(fill) for fill in fills if fill.get("side") == side.value]
+        return _fills
