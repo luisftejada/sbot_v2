@@ -4,7 +4,7 @@ from enum import Enum as PyEnum
 from typing import Any, Optional
 
 from boto3.dynamodb.conditions import Key
-from pydantic import BaseModel, PrivateAttr
+from pydantic import PrivateAttr
 
 from app.config.config import Config
 from app.models.common import Index, IndexField, Record, parse_value
@@ -164,8 +164,10 @@ class Order(Record):
         cls,
         bot: str,
         orderStatus: OrderStatus,
-        from_date: datetime.datetime | None = None,
-        to_date: datetime.datetime | None = None,
+        from_date: Optional[datetime.datetime] = None,
+        to_date: Optional[datetime.datetime] = None,
+        limit: int | None = None,
+        ascending: bool = True,
     ) -> list["Order"]:
         # Define the table name and index name
         table = cls._get_table(bot)
@@ -177,15 +179,28 @@ class Order(Record):
         elif from_date is not None:
             filter_expression &= Key("executed").gte(from_date.isoformat())
         elif to_date is not None:
-            filter_expression &= Key("executed").lte(to_date.isoformat())
-        response = table.query(
-            IndexName=index_name,
-            KeyConditionExpression=filter_expression,
-        )
+            filter_expression &= Key("executed").lt(to_date.isoformat())
+
+        query_params = {
+            "IndexName": index_name,
+            "KeyConditionExpression": filter_expression,
+            "ScanIndexForward": ascending,
+        }
+        if limit is not None:
+            query_params["Limit"] = limit
+        response = table.query(**query_params)
         # Convert response items into Order instances
         data = [cls.create_from_db(item) for item in response.get("Items", [])]
         return data
 
-
-class DbOrder(BaseModel):
-    pass
+    @classmethod
+    def query_first_by_status(
+        cls,
+        bot: str,
+        orderStatus: OrderStatus,
+        from_date: Optional[datetime.datetime] = None,
+        to_date: Optional[datetime.datetime] = None,
+        ascending: bool = True,
+    ) -> Optional["Order"]:
+        orders = cls.query_by_status(bot, orderStatus, from_date, to_date, limit=1, ascending=ascending)
+        return orders[0] if orders else None

@@ -29,9 +29,17 @@ class CoinexClientTest(CoinexClient):
 
 def create_config():
     config_file_path = os.environ["CONFIG_FILE"]
-    with mock.patch.dict(os.environ, {"P_COINEX_BTC1_V2_ACCESS_KEY": "test", "P_COINEX_BTC1_V2_SECRET_KEY": "secret"}):
+    with mock.patch.dict(os.environ, {"P_COINEX_ADA1_V2_ACCESS_KEY": "test", "P_COINEX_ADA1_V2_SECRET_KEY": "secret"}):
         config = Config.read_config_from_yaml(config_file_path)
         return config
+
+
+@pytest.fixture(autouse=True)
+def new_table():
+    Order.delete_table("ADA1")
+    Order.create_table("ADA1")
+    yield
+    Order.delete_table("ADA1")
 
 
 @pytest.fixture
@@ -143,7 +151,7 @@ async def limit_order(order_request: SpotOrderRequest):
         type=order_request.side,
         buy_price=Decimal(order_request.price) if order_request.side == OrderType.BUY.value else None,
         sell_price=Decimal(order_request.price) if order_request.side == OrderType.SELL.value else None,
-        status=OrderStatus.INITIAL,
+        orderStatus=OrderStatus.INITIAL,
         amount=Decimal(order_request.amount),
         filled=None,
         benefit=None,

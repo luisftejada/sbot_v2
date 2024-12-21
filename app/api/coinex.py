@@ -5,7 +5,7 @@ from app.api.base import BaseApi
 from app.api.client.coinex import CoinexClient
 from app.config.config import Config
 from app.models.balance import Balance
-from app.models.order import DbOrder, Order
+from app.models.order import Order
 from app.models.price import Price
 
 
@@ -21,6 +21,10 @@ class CoinexApi(BaseApi):
         self.client = CoinexClient(config)
         self.previous_price: Decimal | None = None
         self.config = config
+
+    @property
+    def bot_name(self):
+        return self.config.label
 
     def get_client(self):
         return CoinexClient(self.config.client.key, self.config.client.secret)
@@ -68,11 +72,11 @@ class CoinexApi(BaseApi):
         orders = []
         for order in exchange_orders:
             new_order = Order.create_from_coinex(self.config, order)
-            found = DbOrder.get_by_order_id(new_order.order_id)
-            if found:
+            try:
+                found = Order.get(self.bot_name, new_order.order_id)
                 orders.append(found)
-            else:
-                new_order.save()
+            except Order.NotFoundError:
+                Order.save(self.bot_name, new_order)
                 orders.append(new_order)
         return orders
 
@@ -81,5 +85,5 @@ class CoinexApi(BaseApi):
         pr = self.config.rnd_price(price, cls=float)
         created = self._execute(self.client.order_limit, market, "buy", am, pr)
         new_order = Order.create_from_coinex(self.config, created)
-        new_order.save()
+        Order.save(self.bot_name, new_order)
         return new_order

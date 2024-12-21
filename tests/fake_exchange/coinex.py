@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.common.common import singleton
 from app.config.config import Config
-from app.models.order import DbOrder, Order
+from app.models.order import Order
 from app.models.price import Price
 from tests.fake_exchange.db import Db
 from tests.fake_exchange.models import BuyOrderResponse
@@ -66,21 +66,13 @@ class CoinexFakeExchange:
     def current_file(self):
         return os.path.join(self.prices_folder, self.data_files[self.current_file_index])
 
-    def reset(self, db_session=None, clean_db=False):
+    def reset(self):
         self.db.reset()
         self.prices = []
         self.index = 0
         self.current_file_index = 0
         self.previous_price = None
         self.load_file_of_prices()
-        if clean_db:
-            assert db_session is not None
-            for db_class in [DbOrder]:
-                self._clean_db_class(db_session, db_class)
-
-    def _clean_db_class(self, db_session, db_class):
-        db_session.query(db_class).delete()
-        db_session.commit()
 
     def load_file_of_prices(self):
         print(f"loading prices from {self.current_file}")
