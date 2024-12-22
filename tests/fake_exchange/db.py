@@ -69,6 +69,15 @@ class Db:
         balance_to.lock(self.config.rnd_amount_by_ccy(buy_order.amount * buy_order.buy_price, buy_order.currency_to()))
         self._add_order(buy_order)
 
+    def add_sell_order(self, sell_order: Order):
+        balance_from, balance_to = self._get_balances(sell_order)
+        if balance_from is None:
+            raise Exception(f"Balance not found. order={sell_order.model_dump()}")
+        if balance_from.available_amount < self.config.rnd_amount_by_ccy(sell_order.amount, sell_order.currency_from()):
+            raise Exception(f"Not enough balance. order={sell_order.model_dump()}, balance={balance_from.model_dump()}")
+        balance_from.lock(self.config.rnd_amount_by_ccy(sell_order.amount, sell_order.currency_from()))
+        self._add_order(sell_order)
+
     def _add_order(self, order: Order):
         self.open_orders.append(order)
 
@@ -77,6 +86,21 @@ class Db:
 
     def create_sell_order(self, market: str, amount: Decimal, price: Decimal):
         self.add_order(Order(market=market, type=OrderType.SELL, amount=amount, status=OrderStatus.OPEN, price=price))
+
+    def cancel_order(self, order_id: str):
+        for order in self.open_orders:
+            if order.order_id == order_id:
+                if order.type == OrderType.BUY:
+                    balance_from, balance_to = self._get_balances(order)
+                    balance_to.unlock(
+                        self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to())
+                    )
+                else:  # OrderType.SELL
+                    balance_from, balance_to = self._get_balances(order)
+                    balance_from.unlock(self.config.rnd_amount_by_ccy(order.amount, order.currency_from()))
+                self.open_orders.remove(order)
+                return order
+        raise Exception(f"Order not found: {order_id}")
 
     def check_buy_orders(self, market: str, price: Decimal):
         any_completed = False

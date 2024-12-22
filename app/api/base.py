@@ -85,5 +85,13 @@ class BaseApi(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        raise NotImplementedError
+
+    @abstractmethod
+    def cancel_order(self, market: str, order_id: str) -> Order:
+        raise NotImplementedError
+
+    @abstractmethod
     def get_filled(self, side: OrderType, fill: Fill | None, pair: Optional[str] = None) -> list[Fill]:
         raise NotImplementedError

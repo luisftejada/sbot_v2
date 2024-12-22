@@ -10,10 +10,11 @@ from pydantic import BaseModel
 
 from app.common.common import singleton
 from app.config.config import Config
+from app.models.enums import OrderType
 from app.models.order import Order
 from app.models.price import Price
 from tests.fake_exchange.db import Db
-from tests.fake_exchange.models import BuyOrderResponse
+from tests.fake_exchange.models import BuyOrderResponse, SellOrderResponse
 
 load_dotenv("configurations/test/.env-tests")
 
@@ -121,6 +122,22 @@ class CoinexFakeExchange:
         response = BuyOrderResponse.from_order(order=order)
         return response
 
+    def add_sell_order(self, order: Order) -> SellOrderResponse:
+        self.db.add_sell_order(sell_order=order)
+        response = SellOrderResponse.from_order(order=order)
+        return response
+
+    def cancel_order(self, order_id: str) -> Order:
+        order = self.db.cancel_order(order_id=order_id)
+        match order.type:
+            case OrderType.BUY:
+                return BuyOrderResponse.from_order(order)
+            case OrderType.SELL:
+                return SellOrderResponse.from_order(order)
+            case _:
+                raise Exception(f"Unknown order type: {order.type}")
+        return order
+
     def get_open_orders(self):
         return self.db.open_orders
 
@@ -144,3 +161,9 @@ class SpotOrderRequest(BaseModel):
                 return f"{self.market.replace(currency, " ")}/{currency}"
 
         raise UnkonwnMarketException(f"Unknown market {self.market}")
+
+
+class SpotCancelOrderRequest(BaseModel):
+    market: str
+    market_type: str
+    order_id: str

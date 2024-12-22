@@ -29,14 +29,14 @@ class TestCoinexApi:
         assert price > 0
 
     def test_get_balance_info(self, coinex_api):
-        fake_exchange = get_exchange()
+        fake_exchange = get_exchange(reset=True)
         fake_exchange.add_balance("BTC", Decimal(1))
         balances = coinex_api.get_balances()
         assert len(balances) > 0
         assert balances.get("BTC").available_amount == Decimal(1)
 
     def test_create_buy_order(self, coinex_api, new_tables):
-        fake_exchange = get_exchange()
+        fake_exchange = get_exchange(reset=True)
         fake_exchange.add_balance("USDT", Decimal(100000))
         order = coinex_api.create_buy_order("ADAUSDT", "0.5", "99000")
         db_order = Order.query_first_by_status("ADA1", OrderStatus.INITIAL)
@@ -51,9 +51,24 @@ class TestCoinexApi:
         exchange_orders = fake_exchange.get_open_orders()
         assert len(exchange_orders) == 1
 
+    def test_create_sell_order(self, coinex_api, new_tables):
+        fake_exchange = get_exchange(reset=True)
+        fake_exchange.add_balance("ADA", Decimal(100))
+        order = coinex_api.create_sell_order("ADAUSDT", "50", "100")
+        db_order = Order.query_first_by_status("ADA1", OrderStatus.INITIAL)
+        assert order.order_id == "1"
+        assert db_order.order_id == "1"
+        assert db_order.amount == Decimal("50")
+        assert db_order.buy_price is None
+        assert db_order.sell_price == Decimal("100")
+        assert db_order.market == "ADAUSDT"
+        assert db_order.type == OrderType.SELL
+        assert db_order.orderStatus == OrderStatus.INITIAL
+        exchange_orders = fake_exchange.get_open_orders()
+        assert len(exchange_orders) == 1
+
     def test_open_orders(self, coinex_api, new_tables):
-        fake_exchange = get_exchange()
-        fake_exchange.reset()
+        fake_exchange = get_exchange(reset=True)
         fake_exchange.add_balance("USDT", Decimal(100000))
         order = coinex_api.create_buy_order("ADAUSDT", "0.5", "100")
         assert order.order_id == "1"
@@ -64,9 +79,17 @@ class TestCoinexApi:
         assert orders[0].order_id == "1"
         assert db_orders[0].order_id == "1"
 
+    def test_cancel_order(self, coinex_api, new_tables):
+        fake_exchange = get_exchange(reset=True)
+        fake_exchange.add_balance("USDT", Decimal(100000))
+        order = coinex_api.create_buy_order("ADAUSDT", "0.5", "100")
+        assert order.order_id == "1"
+        coinex_api.cancel_order("ADAUSDT", "1")
+        exchange_orders = fake_exchange.get_open_orders()
+        assert len(exchange_orders) == 0
+
     def test_get_filled(self, coinex_api, new_tables):
-        fake_exchange = get_exchange()
-        fake_exchange.reset()
+        fake_exchange = get_exchange(reset=True)
         fake_exchange.upload_manual_prices(
             [
                 ["2021-01-01T00:00:00", "101"],

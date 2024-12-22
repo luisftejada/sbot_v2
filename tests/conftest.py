@@ -17,7 +17,7 @@ from app.config.config import Config
 from app.models.enums import OrderStatus, OrderType
 from app.models.filled import DbFill
 from app.models.order import Order
-from tests.fake_exchange.coinex import SpotOrderRequest
+from tests.fake_exchange.coinex import SpotCancelOrderRequest, SpotOrderRequest
 from tests.fake_exchange.models import OrderPendingResponse
 
 load_dotenv("configurations/test/.env-tests")
@@ -61,7 +61,7 @@ def fake_exchange():
     exchange.reset()
 
 
-def get_exchange():
+def get_exchange(reset: bool = False):
     from tests.fake_exchange.coinex import CoinexFakeExchange
 
     exchange = CoinexFakeExchange()
@@ -69,6 +69,8 @@ def get_exchange():
         config = create_config()
         exchange.set_config(config)
     exchange.db.set_config(exchange.config)
+    if reset:
+        exchange.reset()
     return exchange
 
 
@@ -144,31 +146,6 @@ async def get_pending_orders():
     }
 
 
-@app.post("/spot/order")
-async def limit_order(order_request: SpotOrderRequest):
-    print(f"Creating order: {order_request}")
-    exchange = get_exchange()
-    order = Order(
-        order_id=exchange.db.next_order_id,
-        created=exchange._get_current_date(),
-        executed=None,
-        type=order_request.side,
-        buy_price=Decimal(order_request.price) if order_request.side == OrderType.BUY.value else None,
-        sell_price=Decimal(order_request.price) if order_request.side == OrderType.SELL.value else None,
-        orderStatus=OrderStatus.INITIAL,
-        amount=Decimal(order_request.amount),
-        fills=[],
-        benefit=None,
-        market=order_request.market,
-        market_type=order_request.market_type,
-    )
-    if order.type == OrderType.BUY:
-        return exchange.add_buy_order(order).model_dump()
-    else:
-        return {}
-        # TODO: return exchange.add_sell_order(order).model_dump()
-
-
 @app.get("/spot/pending-order")
 async def order_pending(market: str, page: int = 1, limit: int = 100):
     exchange = get_exchange()
@@ -189,3 +166,36 @@ async def user_deals(market: str, market_type: str = "SPOT", limit: int = 100, s
         "pagination": {"total": 1, "has_next": False},
         "message": "OK",
     }
+
+
+@app.post("/spot/order")
+async def limit_order(order_request: SpotOrderRequest):
+    print(f"Creating order: {order_request}")
+    exchange = get_exchange()
+    order = Order(
+        order_id=exchange.db.next_order_id,
+        created=exchange._get_current_date(),
+        executed=None,
+        type=order_request.side,
+        buy_price=Decimal(order_request.price) if order_request.side == OrderType.BUY.value else None,
+        sell_price=Decimal(order_request.price) if order_request.side == OrderType.SELL.value else None,
+        orderStatus=OrderStatus.INITIAL,
+        amount=Decimal(order_request.amount),
+        fills=[],
+        benefit=None,
+        market=order_request.market,
+        market_type=order_request.market_type,
+    )
+    if order.type == OrderType.BUY:
+        return exchange.add_buy_order(order).model_dump()
+    elif order.type == OrderType.SELL:
+        return exchange.add_sell_order(order).model_dump()
+    else:
+        raise RuntimeError("Error creating limit order: Invalid order type: {order.type}")
+
+
+@app.post("/spot/cancel-order")
+async def cancel_order(cance_order_request: SpotCancelOrderRequest):
+    exchange = get_exchange()
+    cancelled_order = exchange.cancel_order(cance_order_request.order_id)
+    return cancelled_order.model_dump()

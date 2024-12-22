@@ -84,13 +84,27 @@ class CoinexApi(BaseApi):
                 orders.append(new_order)
         return orders
 
-    def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+    def _create_order(self, market: str, amount: Decimal, price: Decimal, side: OrderType) -> Order:
         am = self.config.rnd_amount(amount, cls=float)
         pr = self.config.rnd_price(price, cls=float)
-        created = self._execute(self.client.order_limit, market, "buy", am, pr)
+        created = self._execute(self.client.order_limit, market, side.value, am, pr)
         new_order = Order.create_from_coinex(self.config, created)
         Order.save(self.bot_name, new_order)
         return new_order
+
+    def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        return self._create_order(market=market, amount=amount, price=price, side=OrderType.BUY)
+
+    def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        return self._create_order(market=market, amount=amount, price=price, side=OrderType.SELL)
+
+    def cancel_order(self, market: str, order_id: str) -> Order:
+        cancelled = self._execute(self.client.order_pending_cancel, market=market, id=order_id)
+        if cancelled:
+            Order.delete(self.bot_name, order_id)
+        else:
+            raise Exception(f"Error cancelling order: {order_id}")
+        return cancelled
 
     def get_filled(self, side: OrderType, fill: Fill | None, pair: Optional[str] = None) -> list[Fill]:
         match side:

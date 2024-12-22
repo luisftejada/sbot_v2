@@ -4,6 +4,7 @@ from typing import Union
 
 from pydantic import BaseModel, field_validator
 
+from app.models.enums import OrderType
 from app.models.order import Order
 
 
@@ -21,9 +22,11 @@ class Balance(BaseModel):
 
     def lock(self, amount: Decimal):
         self.locked_amount += amount
+        self.available_amount -= amount
 
     def unlock(self, amount: Decimal):
         self.locked_amount -= amount
+        self.available_amount += amount
 
     def dec(self, amount: Decimal):
         self.available_amount -= amount
@@ -66,9 +69,17 @@ class BuyOrderData(BaseModel):
         json_encoders = {datetime: lambda v: int(v.timestamp() * 1000)}
 
 
-class BuyOrderResponse(BaseModel):
+class OrderResponse(BaseModel):
     code: int = 0
     data: BuyOrderData
+
+    @classmethod
+    def get_side(cls) -> str:
+        return OrderType.BUY.value
+
+    @classmethod
+    def get_price(cls, order: Order) -> Decimal:
+        return order.buy_price
 
     @classmethod
     def from_order(cls, order: Order):
@@ -76,15 +87,35 @@ class BuyOrderResponse(BaseModel):
             "order_id": str(order.order_id),
             "market": order.market,
             "market_type": "spot",
-            "side": "buy",
+            "side": cls.get_side(),
             "type": "limit",
             "ccy": order.currency_from(),
             "amount": order.amount,
-            "price": order.buy_price,
+            "price": cls.get_price(order),
             "created_at": order.created.timestamp() * 1000,
             "updated_at": order.created.timestamp() * 1000,
         }
         return cls(code=0, data=data)
+
+
+class BuyOrderResponse(OrderResponse):
+    @classmethod
+    def get_side(cls) -> str:
+        return OrderType.BUY.value
+
+    @classmethod
+    def get_price(cls, order: Order) -> Decimal:
+        return order.buy_price
+
+
+class SellOrderResponse(OrderResponse):
+    @classmethod
+    def get_side(cls) -> str:
+        return OrderType.SELL.value
+
+    @classmethod
+    def get_price(cls, order: Order) -> Decimal:
+        return order.sell_price
 
 
 class OrderPendingResponse(BaseModel):

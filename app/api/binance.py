@@ -36,5 +36,11 @@ class BinanceApi(BaseApi):
     def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
         return Order()
 
+    def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        return Order()
+
+    def cancel_order(self, market: str, order_id) -> Order:
+        return Order()
+
     def get_filled(self, side: OrderType, fill: Fill | None, pair: Optional[str] = None) -> list[Fill]:
         return []
