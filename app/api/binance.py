@@ -5,7 +5,7 @@ from typing import Optional
 from app.api.base import BaseApi
 from app.api.client.binance import BinanceClient
 from app.models.balance import Balance
-from app.models.enums import OrderType
+from app.models.enums import MarketOrderType, OrderType
 from app.models.filled import Fill
 from app.models.order import Order
 from app.models.price import Price
@@ -37,6 +37,9 @@ class BinanceApi(BaseApi):
         return Order()
 
     def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        return Order()
+
+    def create_market_order(self, market: str, amount: Decimal, order_type: MarketOrderType) -> Order:
         return Order()
 
     def cancel_order(self, market: str, order_id) -> Order:

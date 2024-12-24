@@ -3,11 +3,17 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from boto3.dynamodb.conditions import Key
-from pydantic import PrivateAttr
+from pydantic import BaseModel, PrivateAttr
 
 from app.config.config import Config
-from app.models.common import Index, IndexField, Record, parse_value
-from app.models.enums import BASIC_CURRENCIES, OrderStatus, OrderType, OrderTypeError
+from app.models.common import DbBaseModel, Index, IndexField, Record, parse_value
+from app.models.enums import (
+    BASIC_CURRENCIES,
+    MarketOrderType,
+    OrderStatus,
+    OrderType,
+    OrderTypeError,
+)
 from app.models.filled import Fill, fill_parser
 
 
@@ -180,3 +186,198 @@ class Order(Record):
     ) -> Optional["Order"]:
         orders = cls.query_by_status(bot, orderStatus, from_date, to_date, limit=1, ascending=ascending)
         return orders[0] if orders else None
+
+    def executed_day(self):
+        return datetime.datetime(year=self.executed.year, month=self.executed.month, day=self.executed.day)
+
+
+class ExecutedOrder(DbBaseModel):
+    order_id: str
+    executed: datetime.datetime
+    type: MarketOrderType
+    buy_price: Optional[Decimal] = None
+    sell_price: Optional[Decimal] = None
+    amount: Decimal
+    benefit: Optional[Decimal] = None
+    market: str  # Note market does not include /
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.ParsingError = Order.ParsingError
+
+    @classmethod
+    def create_from_db(cls, data: dict) -> "ExecutedOrder":
+        try:
+            return cls(
+                order_id=parse_value(data, "order_id"),
+                executed=parse_value(data, "executed", datetime.datetime),
+                type=parse_value(data, "type", MarketOrderType),
+                buy_price=parse_value(data, "buy_price", Decimal, default=None),
+                sell_price=parse_value(data, "sell_price", Decimal, default=None),
+                amount=parse_value(data, "amount", Decimal),
+                benefit=parse_value(data, "benefit", Decimal, default=None),
+                market=parse_value(data, "market"),
+            )
+        except KeyError as e:
+            raise cls.ParsingError(f"Missing required field in database record: {e}")
+        except Exception as e:
+            raise ValueError(f"Error creating Order from database record: {e}")
+
+    @classmethod
+    def create_from_order(cls, order: Order, order_type: MarketOrderType | OrderType) -> "ExecutedOrder":
+        return cls(
+            order_id=order.order_id,
+            executed=order.executed,
+            type=order_type,
+            buy_price=order.buy_price,
+            sell_price=order.sell_price,
+            amount=order.amount,
+            benefit=order.benefit,
+            market=order.market,
+        )
+
+
+def market_orders_parser(value) -> list[ExecutedOrder]:
+    orders = [ExecutedOrder.create_from_db(order) for order in value]
+    return orders
+
+
+class DbExecuted(Record):
+    _KEY_FIELD: str = PrivateAttr(default="date")
+    _TABLE_NAME: str = PrivateAttr(default="executed")
+    _indexes: list[Index] = PrivateAttr(
+        default=[
+            Index(
+                partition_key=IndexField(field_name="day", key_type="HASH"),
+                sort_key=IndexField(field_name="date", key_type="RANGE"),
+            )
+        ]
+    )
+
+    date: datetime.datetime
+    day: datetime.datetime
+    orders: list[ExecutedOrder]
+
+    _page_size: Optional[int] = PrivateAttr(default=1000)
+
+    def __init__(self, *args, **kwargs):
+        private_value = kwargs.pop("_page_size", None)
+        super().__init__(*args, **kwargs)
+        self._page_size = private_value if private_value else self._page_size
+
+    @classmethod
+    def get_attribute(cls, field_name):
+        match field_name:
+            case "date", "day":
+                return "S"
+            case "orders":
+                return "L"
+            case _:
+                return "S"
+
+    @classmethod
+    def create_from_db(cls, data: dict) -> "DbExecuted":
+        executed = cls(
+            date=parse_value(data, "date", datetime.datetime),
+            day=parse_value(data, "day", datetime.datetime),
+            orders=sorted(
+                parse_value(data, "orders", market_orders_parser, default=[]), key=lambda order: order.executed
+            ),
+        )
+        return executed
+
+    def is_full(self) -> bool:
+        return len(self.orders) >= self._page_size if self._page_size else False
+
+    def add_order(self, order: Order, order_type: MarketOrderType | OrderType) -> ExecutedOrder:
+        executed_order = ExecutedOrder.create_from_order(order, order_type)
+        self.orders.append(executed_order)
+        return executed_order
+
+    @classmethod
+    def query_by_day(cls, bot: str, day: datetime.datetime) -> list["DbExecuted"]:
+        table = cls._get_table(bot)
+        filter_expression = Key("day").eq(day.isoformat())
+        query_params = {
+            "IndexName": "day_date_index",
+            "KeyConditionExpression": filter_expression,
+            "ScanIndexForward": True,
+        }
+        response = table.query(**query_params)
+        data = [cls.create_from_db(item) for item in response.get("Items", [])]
+        return data
+
+
+class Executed(BaseModel):
+    date: datetime.datetime
+    pages: list[DbExecuted] = []
+    bot: str
+
+    _page_size: Optional[int] = PrivateAttr(default=1000)
+
+    @property
+    def current_page(self) -> DbExecuted:
+        return self.pages[-1]
+
+    @property
+    def current_date(self) -> datetime.datetime:
+        return self.current_page.date
+
+    @property
+    def current_day(self) -> datetime.datetime:
+        return self.current_page.day
+
+    @classmethod
+    def load_day(cls, bot: str, day: datetime.datetime) -> "Executed":
+        new_executed = cls(bot=bot, date=day, pages=[])
+        new_executed.load()
+        return new_executed
+
+    def __init__(self, *args, **kwargs):
+        private_value = kwargs.pop("_page_size", None)
+        super().__init__(*args, **kwargs)
+        self._page_size = private_value if private_value else self._page_size
+
+    def add_executed_order(self, order: Order, order_type: MarketOrderType | OrderType) -> ExecutedOrder:
+        if len(self.pages) == 0:
+            self.load()
+        if self.current_page.is_full():
+            DbExecuted.save(self.bot, self.current_page)
+            self.add_page()
+        return self.current_page.add_order(order=order, order_type=order_type)
+
+    def add_page(self):
+        self.pages.append(
+            DbExecuted(
+                day=self.current_day,
+                date=self.current_date + datetime.timedelta(minutes=1),
+                orders=[],
+                _page_size=self._page_size,
+            )
+        )
+
+    def load(self) -> None:
+        from_date = self.date
+        filter_expression = Key("day").eq(from_date.isoformat())
+        query_params = {
+            "IndexName": "day_date_index",
+            "KeyConditionExpression": filter_expression,
+            "ScanIndexForward": True,
+        }
+        table = DbExecuted._get_table(self.bot)
+        response = table.query(**query_params)
+        self.pages = [DbExecuted.create_from_db(item) for item in response.get("Items", [])]
+        if len(self.pages) == 0:
+            self.pages = [DbExecuted(date=self.date, day=self.date, orders=[], _page_size=self._page_size)]
+
+    @classmethod
+    def query_by_day(cls, bot: str, day: datetime.datetime) -> list[ExecutedOrder]:
+        data = DbExecuted.query_by_day(bot, day)
+        orders = []
+        for page in data:
+            orders.extend(page.orders)
+        return orders
+
+    def save(self):
+        if len(self.pages) > 0:
+            DbExecuted.save(self.bot, self.current_page)

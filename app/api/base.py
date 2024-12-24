@@ -7,7 +7,7 @@ import requests
 
 from app.config.config import Config
 from app.models.balance import Balance
-from app.models.enums import OrderType
+from app.models.enums import MarketOrderType, OrderType
 from app.models.filled import Fill
 from app.models.order import Order
 from app.models.price import Price
@@ -86,6 +86,10 @@ class BaseApi(ABC):
 
     @abstractmethod
     def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+        raise NotImplementedError
+
+    @abstractmethod
+    def create_market_order(self, market: str, amount: Decimal, order_type: MarketOrderType) -> Order:
         raise NotImplementedError
 
     @abstractmethod

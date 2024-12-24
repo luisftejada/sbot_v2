@@ -129,6 +129,18 @@ class Db:
         if any_completed:
             self.update_completed_orders(OrderType.SELL)
 
+    def add_market_order(self, order: Order):
+        order.orderStatus = OrderStatus.EXECUTED
+        balance_from, balance_to = self._get_balances(order)
+        if order.type == OrderType.BUY:
+            balance_to.dec(self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to()))
+            balance_from.inc(self.config.rnd_amount(order.amount))
+        else:  # OrderType.SELL
+            balance_from.dec(self.config.rnd_amount(order.amount))
+            balance_to.inc(self.config.rnd_amount_by_ccy(order.amount * order.sell_price, order.currency_to()))
+        self.update_completed_orders(order.type)
+        return order
+
     def update_completed_orders(self, side: OrderStatus) -> List[Order]:
         completed = [
             order for order in self.open_orders if order.orderStatus == OrderStatus.EXECUTED and order.type == side

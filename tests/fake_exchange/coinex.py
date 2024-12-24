@@ -4,6 +4,7 @@ This is a fake exchange module for testing purposes.
 import datetime
 import os
 from decimal import Decimal
+from typing import Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -127,6 +128,17 @@ class CoinexFakeExchange:
         response = SellOrderResponse.from_order(order=order)
         return response
 
+    def add_market_order(self, order: Order):
+        market_order = self.db.add_market_order(order=order)
+        match market_order.type:
+            case OrderType.BUY:
+                response = BuyOrderResponse.from_order(order=order)
+            case OrderType.SELL:
+                response = SellOrderResponse.from_order(order=order)
+            case _:
+                raise Exception(f"Unknown order type: {order.type}")
+        return response
+
     def cancel_order(self, order_id: str) -> Order:
         order = self.db.cancel_order(order_id=order_id)
         match order.type:
@@ -146,12 +158,28 @@ class UnkonwnMarketException(Exception):
     pass
 
 
-class SpotOrderRequest(BaseModel):
+class SpotMarketOrderRequest(BaseModel):
     market: str
     market_type: str
     side: str
     type: str
-    price: Decimal
+    amount: Decimal
+
+    @property
+    def pair(self) -> str:
+        for currency in ["USDT", "BTC", "USDC"]:
+            if currency in self.market:
+                return f"{self.market.replace(currency, " ")}/{currency}"
+
+        raise UnkonwnMarketException(f"Unknown market {self.market}")
+
+
+class SpotLimitOrderRequest(BaseModel):
+    market: str
+    market_type: str
+    side: str
+    type: str
+    price: Optional[Decimal]
     amount: Decimal
 
     @property

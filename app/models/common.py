@@ -7,6 +7,7 @@ from boto3.dynamodb.table import TableResource as Table
 from pydantic import BaseModel, PrivateAttr
 
 from app.config.dynamodb import get_dynamodb
+from app.models.enums import PyEnum
 
 
 def parse_value(db_record: dict, key: str, cls: Any = str, default: Any = None) -> Any:
@@ -46,7 +47,40 @@ class Index(BaseModel):
     projection: Literal["ALL", "KEYS_ONLY", "INCLUDE"] = "ALL"
 
 
-class Record(BaseModel):
+def clean_dict(dic: Any) -> Any:
+    data = {}
+    for k, v in dic.items():
+        match v:
+            case None:
+                continue
+            case dict():
+                data[k] = clean_dict(v)
+            case list():
+                data[k] = [clean_dict(i) for i in v]
+            case set():
+                data[k] = {clean_dict(i) for i in v}
+            case decimal.Decimal():
+                data[k] = str(v)
+            case datetime.datetime():
+                data[k] = v.isoformat()
+            case PyEnum():
+                data[k] = v.value
+            case _:
+                data[k] = v
+    return data
+
+
+class DbBaseModel(BaseModel):
+    def model_dump(self) -> dict:
+        data = super().model_dump()
+        dic = clean_dict(data)
+        return dic
+
+    def model_dump_json(self) -> str:
+        return json.dumps(self.model_dump())
+
+
+class Record(DbBaseModel):
     class NotFoundError(Exception):
         pass
 
@@ -182,9 +216,6 @@ class Record(BaseModel):
     def save(cls, bot: str, record: "Record") -> None:
         table = cls._get_table(bot)
         item = json.loads(record.model_dump_json())
-
-        # Remove None fields to avoid saving them to DynamoDB
-        item = {k: v for k, v in item.items() if v is not None}
         try:
             # Put the item into the DynamoDB table
             table.put_item(Item=item)

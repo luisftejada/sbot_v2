@@ -6,9 +6,9 @@ from app.api.base import BaseApi
 from app.api.client.coinex import CoinexClient
 from app.config.config import Config
 from app.models.balance import Balance
-from app.models.enums import OrderType
+from app.models.enums import MarketOrderType, OrderType
 from app.models.filled import DbFill, Fill
-from app.models.order import Order
+from app.models.order import Executed, Order
 from app.models.price import Price
 
 
@@ -97,6 +97,15 @@ class CoinexApi(BaseApi):
 
     def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
         return self._create_order(market=market, amount=amount, price=price, side=OrderType.SELL)
+
+    def create_market_order(self, market: str, amount: Decimal, order_type: MarketOrderType) -> Order:
+        am = self.config.rnd_amount(amount, cls=float)
+        created = self._execute(self.client.order_market, market, order_type.side.value, am)
+        new_order = Order.create_from_coinex(self.config, created)
+        executed = Executed.load_day(bot=self.bot_name, day=new_order.executed_day())
+        executed.add_executed_order(new_order, order_type)
+        executed.save()
+        return new_order
 
     def cancel_order(self, market: str, order_id: str) -> Order:
         cancelled = self._execute(self.client.order_pending_cancel, market=market, id=order_id)

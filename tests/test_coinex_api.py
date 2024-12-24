@@ -2,9 +2,10 @@ import datetime
 from decimal import Decimal
 
 from dotenv import load_dotenv
+from freezegun import freeze_time
 
 from app.models.enums import OrderStatus, OrderType
-from app.models.order import Order
+from app.models.order import Executed, MarketOrderType, Order
 from tests.conftest import get_exchange
 
 load_dotenv("configurations/test/.env-tests")
@@ -108,3 +109,19 @@ class TestCoinexApi:
         last_filled = coinex_api.last_fill
         filled = coinex_api.get_filled(OrderType.BUY, last_filled)
         assert len(filled) > 0
+
+    def test_create_market_order(self, coinex_api, new_tables):
+        fake_exchange = get_exchange(reset=True)
+        fake_exchange.add_balance("USDT", Decimal(100000))
+        fake_exchange.add_balance("ADA", Decimal(100))
+        fake_exchange.upload_manual_prices(
+            [
+                ["2024-01-01T00:00:00", "101"],
+                ["2024-01-01T00:00:01", "101"],
+            ]
+        )
+        with freeze_time("2024-01-01"):
+            order = coinex_api.create_market_order("ADAUSDT", "0.5", MarketOrderType.BUY)
+            all_market_orders = Executed.query_by_day("ADA1", datetime.datetime(2024, 1, 1))
+            assert len(all_market_orders) == 1
+            assert all_market_orders[0].order_id == order.order_id
