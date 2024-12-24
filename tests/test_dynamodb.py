@@ -1,11 +1,9 @@
 import datetime
 from decimal import Decimal
 
-import pytest
 from dotenv import load_dotenv
 
 from app.config import dynamodb
-from app.models.common import Record
 from app.models.enums import OrderStatus, OrderType
 from app.models.order import Order
 
@@ -33,8 +31,7 @@ class TestDynamoDb:
 
         assert Order.get("ADA1", "1").order_id == "1"
         Order.delete("ADA1", "1")
-        with pytest.raises(Record.NotFoundError):
-            Order.get("ADA1", "1")
+        assert Order.get("ADA1", "1") is None
 
     def _add_orders(self, itererations, statuses):
         date = datetime.datetime(2024, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
@@ -64,21 +61,28 @@ class TestDynamoDb:
 
         # ascending order
         in_period_initial_orders = Order.query_by_status("ADA1", OrderStatus.INITIAL, from_date, to_date)
-        assert len(in_period_initial_orders) == 4
+        assert len(in_period_initial_orders) == 5
         assert in_period_initial_orders[0].created.day == 5
 
         # descending order
         in_period_executed_orders = Order.query_by_status(
             "ADA1", OrderStatus.EXECUTED, from_date, to_date, ascending=False
         )
-        assert len(in_period_executed_orders) == 4
-        assert in_period_executed_orders[0].created.day == 8
+        assert len(in_period_executed_orders) == 5
+        assert in_period_executed_orders[0].created.day == 9
 
         # limit to 1
         first_executed_order = Order.query_by_status(
             "ADA1", OrderStatus.EXECUTED, from_date, to_date, ascending=False, limit=1
         )
         assert len(first_executed_order) == 1
+        first_executed_order[0].created.day == 9
+
+        first_executed_order = Order.query_by_status(
+            "ADA1", OrderStatus.EXECUTED, from_date, to_date, ascending=True, limit=1
+        )
+        assert len(first_executed_order) == 1
+        first_executed_order[0].created.day == 5
 
         # empty result
         missing_orders = Order.query_by_status(

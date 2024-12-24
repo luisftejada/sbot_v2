@@ -4,8 +4,13 @@ from typing import Dict, List
 
 from app.common.common import singleton
 from app.config.config import Config
+from app.models.balance import (
+    Balance,
+    NotEnoughBalanceException,
+    NotFoundBalanceException,
+)
 from app.models.order import Order, OrderStatus, OrderType
-from tests.fake_exchange.models import Balance
+from app.models.price import Price
 
 
 @singleton
@@ -19,12 +24,12 @@ class Db:
         self.completed_orders: List[Order] = []
         self.config: Config | None = None
 
-    def reset(self):
+    def reset(self, config: Config = None):
         self.order_id = 1
         self.balances = {}
         self.open_orders = []
         self.completed_orders = []
-        self.config = None
+        self.config = config
         self.fill_id = 1
 
     def set_config(self, config: Config):
@@ -51,30 +56,36 @@ class Db:
     def increase_balance(self, currency: str, amount: Decimal):
         balance = self.balances.get(currency)
         if balance is None:
-            balance = Balance(currency=currency)
+            balance = Balance.create_basic_balance(currency=currency, config=self.config)
             self.balances[currency] = balance
-        balance.available_amount += amount
+        balance.available += amount
 
     def _get_balances(self, order: Order) -> List[Balance]:
         return [self.get_balance(order.currency_from()), self.get_balance(order.currency_to())]
 
-    def add_buy_order(self, buy_order: Order):
+    def add_buy_order(self, buy_order: Order, price: Price):
         balance_from, balance_to = self._get_balances(buy_order)
         if balance_to is None:
-            raise Exception(f"Balance not found. order={buy_order.model_dump()}")
-        if balance_to.available_amount < self.config.rnd_amount_by_ccy(
+            raise NotFoundBalanceException(f"Balance not found. order={buy_order.model_dump()}")
+        if balance_to.available_amount(price) < self.config.rnd_amount_by_ccy(
             buy_order.amount * buy_order.buy_price, buy_order.currency_to()
         ):
-            raise Exception(f"Not enough balance. order={buy_order.model_dump()}, balance={balance_to.model_dump()}")
+            raise NotEnoughBalanceException(
+                f"Not enough balance. order={buy_order.model_dump()}, balance={balance_to.model_dump()}"
+            )
         balance_to.lock(self.config.rnd_amount_by_ccy(buy_order.amount * buy_order.buy_price, buy_order.currency_to()))
         self._add_order(buy_order)
 
-    def add_sell_order(self, sell_order: Order):
+    def add_sell_order(self, sell_order: Order, price: Price):
         balance_from, balance_to = self._get_balances(sell_order)
         if balance_from is None:
-            raise Exception(f"Balance not found. order={sell_order.model_dump()}")
-        if balance_from.available_amount < self.config.rnd_amount_by_ccy(sell_order.amount, sell_order.currency_from()):
-            raise Exception(f"Not enough balance. order={sell_order.model_dump()}, balance={balance_from.model_dump()}")
+            raise NotFoundBalanceException(f"Balance not found. order={sell_order.model_dump()}")
+        if balance_from.available_amount(price) < self.config.rnd_amount_by_ccy(
+            sell_order.amount, sell_order.currency_from()
+        ):
+            raise NotEnoughBalanceException(
+                f"Not enough balance. order={sell_order.model_dump()}, balance={balance_from.model_dump()}"
+            )
         balance_from.lock(self.config.rnd_amount_by_ccy(sell_order.amount, sell_order.currency_from()))
         self._add_order(sell_order)
 
@@ -129,14 +140,24 @@ class Db:
         if any_completed:
             self.update_completed_orders(OrderType.SELL)
 
-    def add_market_order(self, order: Order):
+    def add_market_order(self, order: Order, price: Price):
         order.orderStatus = OrderStatus.EXECUTED
         balance_from, balance_to = self._get_balances(order)
         if order.type == OrderType.BUY:
-            balance_to.dec(self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to()))
+            amount_to_dec = self.config.rnd_amount_by_ccy(order.amount * order.buy_price, order.currency_to())
+            if balance_to.available_amount(price) < amount_to_dec:
+                raise NotEnoughBalanceException(
+                    f"Not enough balance. order={order.model_dump()}, balance={balance_to.model_dump()}"
+                )
+            balance_to.dec(amount_to_dec)
             balance_from.inc(self.config.rnd_amount(order.amount))
         else:  # OrderType.SELL
-            balance_from.dec(self.config.rnd_amount(order.amount))
+            amount_to_dec = self.config.rnd_amount(order.amount)
+            if balance_from.available_amount(price) < amount_to_dec:
+                raise NotEnoughBalanceException(
+                    f"Not enough balance. order={order.model_dump()}, balance={balance_from.model_dump()}"
+                )
+            balance_from.dec(amount_to_dec)
             balance_to.inc(self.config.rnd_amount_by_ccy(order.amount * order.sell_price, order.currency_to()))
         self.update_completed_orders(order.type)
         return order

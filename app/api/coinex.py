@@ -58,14 +58,12 @@ class CoinexApi(BaseApi):
 
         for currency in self.config.currencies:
             if currency not in balances:
-                return_balances[currency] = Balance(currency=currency, total=Decimal(0), locked=Decimal(0))
+                return_balances[currency] = Balance(
+                    currency=currency, available=Decimal(0), locked_amount=Decimal(0), rinconcito_usdt=Decimal(0)
+                )
             else:
                 bal = balances.get(currency)
-                return_balances[currency] = Balance(
-                    currency=currency,
-                    available_amount=Decimal(bal.get("available")) + Decimal(bal.get("frozen")),
-                    locked_amount=Decimal(bal.get("frozen")),
-                )
+                return_balances[currency] = Balance.create_from_coinex(currency=currency, data=bal, config=self.config)
         return return_balances
 
     def order_pending(self, market: str, page: int = 1, limit: int = 100, **params):

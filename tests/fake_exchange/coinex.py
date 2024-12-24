@@ -43,6 +43,7 @@ class StopLongRun(Exception):
 class CoinexFakeExchange:
     def __init__(self):
         self.db = Db()
+        self.deal_id = 0
         self.prices = []
         self.index = 0
         self.config = None
@@ -68,10 +69,11 @@ class CoinexFakeExchange:
     def current_file(self):
         return os.path.join(self.prices_folder, self.data_files[self.current_file_index])
 
-    def reset(self):
-        self.db.reset()
+    def reset(self, config: Config = None):
+        self.db.reset(config=config)
         self.prices = []
         self.index = 0
+        self.deal_id = 0
         self.current_file_index = 0
         self.previous_price = None
         self.load_file_of_prices()
@@ -87,6 +89,17 @@ class CoinexFakeExchange:
     def _get_current_date(self) -> datetime.datetime:
         line = self.prices[self.index]
         return datetime.datetime.fromisoformat(line[0])
+
+    def get_previous_price(self) -> Price:
+        if self.previous_price:
+            return self.previous_price
+        else:
+            line = self.prices[self.index]
+            self.previous_price = self.get_price_from_line(line)
+        return self.previous_price
+
+    def get_price_from_line(self, line: list[str]) -> Price:
+        return Price(price=Decimal(line[1]), date=datetime.datetime.fromisoformat(line[0]))
 
     def get_current_price(self) -> Price:
         if len(self.prices) == 0:
@@ -113,23 +126,24 @@ class CoinexFakeExchange:
         self.previous_price = new_price
         self.db.check_buy_orders(self.market, new_price.price)
         self.db.check_sell_orders(self.market, new_price.price)
+        self.deal_id += 1
         return new_price
 
     def add_balance(self, currency: str, amount: Decimal):
         self.db.increase_balance(currency=currency, amount=amount)
 
     def add_buy_order(self, order: Order) -> BuyOrderResponse:
-        self.db.add_buy_order(buy_order=order)
+        self.db.add_buy_order(buy_order=order, price=self.get_previous_price())
         response = BuyOrderResponse.from_order(order=order)
         return response
 
     def add_sell_order(self, order: Order) -> SellOrderResponse:
-        self.db.add_sell_order(sell_order=order)
+        self.db.add_sell_order(sell_order=order, price=self.get_previous_price())
         response = SellOrderResponse.from_order(order=order)
         return response
 
     def add_market_order(self, order: Order):
-        market_order = self.db.add_market_order(order=order)
+        market_order = self.db.add_market_order(order=order, price=self.get_previous_price())
         match market_order.type:
             case OrderType.BUY:
                 response = BuyOrderResponse.from_order(order=order)

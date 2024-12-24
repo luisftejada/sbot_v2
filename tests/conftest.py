@@ -1,3 +1,4 @@
+import datetime
 import os
 import signal
 import time
@@ -65,7 +66,7 @@ def fake_exchange():
     exchange.reset()
 
 
-def get_exchange(reset: bool = False):
+def get_exchange(reset: bool = False, upload_basic_prices: bool = False, basic_prices: list[datetime.datetime] = []):
     from tests.fake_exchange.coinex import CoinexFakeExchange
 
     exchange = CoinexFakeExchange()
@@ -74,7 +75,15 @@ def get_exchange(reset: bool = False):
         exchange.set_config(config)
     exchange.db.set_config(exchange.config)
     if reset:
-        exchange.reset()
+        exchange.reset(config=exchange.config)
+    if upload_basic_prices:
+        prices = basic_prices or [
+            ["2021-01-01T00:00:00", "101"],
+            ["2021-01-01T00:00:01", "100"],
+            ["2021-01-01T00:01:00", "99"],
+            ["2021-01-01T00:02:00", "98"],
+        ]
+        exchange.upload_manual_prices(prices)
     return exchange
 
 
@@ -120,7 +129,7 @@ async def market_deals():
         "code": 0,
         "data": [
             {
-                "deal_id": exchange.index,
+                "deal_id": exchange.deal_id,
                 "created_at": int(price.date.timestamp() * 1000),
                 "price": f"{price.price: .2f}",
                 "amount": "1.0",

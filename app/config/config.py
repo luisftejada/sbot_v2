@@ -10,6 +10,7 @@ from app.config.exchange_decimals import (
     MarketDecimals,
     MarketDecimalsUndefined,
 )
+from app.models.price import Price
 
 
 class ClientCredentials(BaseModel):
@@ -24,6 +25,7 @@ class Config(BaseModel):
     pair: str
     decimals: ExchangeDecimals
     client: ClientCredentials
+    min_buy_amount_usdt: Decimal
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -37,6 +39,9 @@ class Config(BaseModel):
     def rnd_amount(self, amount: Decimal, cls: type = Decimal) -> Decimal:
         amount_decimals = self.decimals.pairs[self.market].amount
         return rnd(amount, amount_decimals, cls=cls)
+
+    def get_min_buy_amount(self, price: Price):
+        return self.rnd_amount(self.min_buy_amount_usdt / price.price)
 
     def rnd_amount_by_ccy(self, amount: Decimal, currency: str, cls: type = Decimal) -> Decimal:
         match currency:

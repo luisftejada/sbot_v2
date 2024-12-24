@@ -30,14 +30,14 @@ class TestCoinexApi:
         assert price > 0
 
     def test_get_balance_info(self, coinex_api):
-        fake_exchange = get_exchange(reset=True)
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
         fake_exchange.add_balance("BTC", Decimal(1))
         balances = coinex_api.get_balances()
         assert len(balances) > 0
-        assert balances.get("BTC").available_amount == Decimal(1)
+        assert balances.get("BTC").available == Decimal(1)
 
     def test_create_buy_order(self, coinex_api, new_tables):
-        fake_exchange = get_exchange(reset=True)
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
         fake_exchange.add_balance("USDT", Decimal(100000))
         order = coinex_api.create_buy_order("ADAUSDT", "0.5", "99000")
         db_order = Order.query_first_by_status("ADA1", OrderStatus.INITIAL)
@@ -53,7 +53,7 @@ class TestCoinexApi:
         assert len(exchange_orders) == 1
 
     def test_create_sell_order(self, coinex_api, new_tables):
-        fake_exchange = get_exchange(reset=True)
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
         fake_exchange.add_balance("ADA", Decimal(100))
         order = coinex_api.create_sell_order("ADAUSDT", "50", "100")
         db_order = Order.query_first_by_status("ADA1", OrderStatus.INITIAL)
@@ -69,7 +69,7 @@ class TestCoinexApi:
         assert len(exchange_orders) == 1
 
     def test_open_orders(self, coinex_api, new_tables):
-        fake_exchange = get_exchange(reset=True)
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
         fake_exchange.add_balance("USDT", Decimal(100000))
         order = coinex_api.create_buy_order("ADAUSDT", "0.5", "100")
         assert order.order_id == "1"
@@ -81,7 +81,7 @@ class TestCoinexApi:
         assert db_orders[0].order_id == "1"
 
     def test_cancel_order(self, coinex_api, new_tables):
-        fake_exchange = get_exchange(reset=True)
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
         fake_exchange.add_balance("USDT", Decimal(100000))
         order = coinex_api.create_buy_order("ADAUSDT", "0.5", "100")
         assert order.order_id == "1"
@@ -90,36 +90,26 @@ class TestCoinexApi:
         assert len(exchange_orders) == 0
 
     def test_get_filled(self, coinex_api, new_tables):
-        fake_exchange = get_exchange(reset=True)
-        fake_exchange.upload_manual_prices(
-            [
-                ["2021-01-01T00:00:00", "101"],
-                ["2021-01-01T00:00:01", "100"],
-                ["2021-01-01T00:01:00", "99"],
-                ["2021-01-01T00:02:00", "98"],
-            ]
-        )
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
         fake_exchange.add_balance("USDT", Decimal(100000))
         fake_exchange.add_balance("ADA", Decimal(100))
         order = coinex_api.create_buy_order("ADAUSDT", "50", "100")
         assert order.order_id == "1"
         # pass some time to let the exchange execute the buy order
-        for _ in range(3):
+        for _ in range(2):
             fake_exchange.get_current_price()
         last_filled = coinex_api.last_fill
         filled = coinex_api.get_filled(OrderType.BUY, last_filled)
         assert len(filled) > 0
 
     def test_create_market_order(self, coinex_api, new_tables):
-        fake_exchange = get_exchange(reset=True)
+        prices = [
+            ["2024-01-01T00:00:00", "101"],
+            ["2024-01-01T00:00:01", "101"],
+        ]
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True, basic_prices=prices)
         fake_exchange.add_balance("USDT", Decimal(100000))
         fake_exchange.add_balance("ADA", Decimal(100))
-        fake_exchange.upload_manual_prices(
-            [
-                ["2024-01-01T00:00:00", "101"],
-                ["2024-01-01T00:00:01", "101"],
-            ]
-        )
         with freeze_time("2024-01-01"):
             order = coinex_api.create_market_order("ADAUSDT", "0.5", MarketOrderType.BUY)
             all_market_orders = Executed.query_by_day("ADA1", datetime.datetime(2024, 1, 1))

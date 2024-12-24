@@ -8,33 +8,6 @@ from app.models.enums import OrderType
 from app.models.order import Order
 
 
-class Balance(BaseModel):
-    currency: str
-    available_amount: Decimal = Decimal(0)
-    locked_amount: Decimal = Decimal(0)
-
-    @property
-    def total(self) -> Decimal:
-        return self.available_amount + self.locked_amount
-
-    def inc(self, amount: Decimal):
-        self.available_amount += amount
-
-    def lock(self, amount: Decimal):
-        self.locked_amount += amount
-        self.available_amount -= amount
-
-    def unlock(self, amount: Decimal):
-        self.locked_amount -= amount
-        self.available_amount += amount
-
-    def dec(self, amount: Decimal):
-        self.available_amount -= amount
-
-    def get_coinex_data(self):
-        return {"ccy": self.currency, "available": f"{self.available_amount}", "frozen": f"{self.locked_amount}"}
-
-
 class BuyOrderData(BaseModel):
     order_id: str
     market: str

@@ -34,9 +34,11 @@ def create_decimals_file():
 @pytest.fixture
 def create_valid_data_yaml(create_temp_yaml):
     valid_data = {
-        "label": "test_label",
+        "label": "ADA1",
         "exchange": "coinex",
         "market": "BTCUSDT",
+        "min_buy_amount_usdt": "200",
+        "pair": "ADA1/USDT",
     }
     return create_temp_yaml(valid_data)
 
@@ -45,9 +47,10 @@ def create_valid_data_yaml(create_temp_yaml):
 @pytest.fixture
 def create_invalid_data_yaml(create_temp_yaml):
     invalid_data = {
-        "label": "test_label",
+        "label": "ADA1",
         "exchange": "coinex",
-        # Falta "market"
+        "min_buy_amount_usdt": "200",
+        # pair is missing
     }
     return create_temp_yaml(invalid_data)
 
@@ -61,9 +64,9 @@ def test_read_config_from_yaml_valid(create_valid_data_yaml, create_decimals_fil
         result = Config.read_config_from_yaml(temp_file_path)
 
         assert isinstance(result, Config)
-        assert result.label == "test_label"
+        assert result.label == "ADA1"
         assert result.exchange == "coinex"
-        assert result.market == "BTCUSDT"
+        assert result.market == "ADA1USDT"
         assert isinstance(result.decimals, ExchangeDecimals)
 
 
