@@ -8,7 +8,7 @@ from app.config.config import Config
 from app.models.balance import Balance
 from app.models.enums import MarketOrderType, OrderType
 from app.models.filled import DbFill, Fill
-from app.models.order import Executed, Order
+from app.models.order import Executed, Order, OrderTypeError
 from app.models.price import Price
 
 
@@ -82,19 +82,32 @@ class CoinexApi(BaseApi):
                 orders.append(new_order)
         return orders
 
-    def _create_order(self, market: str, amount: Decimal, price: Decimal, side: OrderType) -> Order:
+    def _create_order(
+        self, market: str, amount: Decimal, buy_price: Decimal, side: OrderType, sell_price: Optional[Decimal] = None
+    ) -> Order:
         am = self.config.rnd_amount(amount, cls=float)
-        pr = self.config.rnd_price(price, cls=float)
+        match side:
+            case side.BUY:
+                pr = self.config.rnd_price(buy_price, cls=float)
+            case side.SELL:
+                pr = self.config.rnd_price(sell_price, cls=float)
+            case _:
+                raise OrderTypeError(side)
+
         created = self._execute(self.client.order_limit, market, side.value, am, pr)
         new_order = Order.create_from_coinex(self.config, created)
+        if side == OrderType.SELL:
+            new_order.buy_price = Decimal(buy_price)
         Order.save(self.bot_name, new_order)
         return new_order
 
     def create_buy_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
-        return self._create_order(market=market, amount=amount, price=price, side=OrderType.BUY)
+        return self._create_order(market=market, amount=amount, buy_price=price, side=OrderType.BUY)
 
-    def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
-        return self._create_order(market=market, amount=amount, price=price, side=OrderType.SELL)
+    def create_sell_order(self, market: str, amount: Decimal, buy_price: Decimal, sell_price: Decimal) -> Order:
+        return self._create_order(
+            market=market, amount=amount, buy_price=buy_price, sell_price=sell_price, side=OrderType.SELL
+        )
 
     def create_market_order(self, market: str, amount: Decimal, order_type: MarketOrderType) -> Order:
         am = self.config.rnd_amount(amount, cls=float)
@@ -124,3 +137,23 @@ class CoinexApi(BaseApi):
         fills = self._execute(self.client.order_user_deals, self.config.market, start_time=start_time)
         _fills = [Fill.from_coinex(fill) for fill in fills if fill.get("side") == side.value]
         return _fills
+
+    def join_orders(self, market: str, price: Price, order1: Order, order2: Order) -> Order:
+        self.cancel_order(market, order1.order_id)
+        self.cancel_order(market, order2.order_id)
+        order1.buy_price = order1.buy_price or price.price
+        order2.buy_price = order2.buy_price or price.price
+        order1.sell_price = order1.sell_price or price.price
+        order2.sell_price = order2.sell_price or price.price
+        new_amount = order1.amount + order2.amount
+        new_buy_price = self.config.rnd_price(
+            (order1.amount * order1.buy_price + order2.amount * order2.buy_price) / new_amount
+        )
+        new_sell_price = self.config.rnd_price(
+            (order1.amount * order1.sell_price + order2.amount * order2.sell_price) / new_amount
+        )
+
+        new_order = self.create_sell_order(
+            market=market, amount=new_amount, buy_price=new_buy_price, sell_price=new_sell_price
+        )
+        return new_order

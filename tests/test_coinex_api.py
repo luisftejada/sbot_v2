@@ -6,6 +6,7 @@ from freezegun import freeze_time
 
 from app.models.enums import OrderStatus, OrderType
 from app.models.order import Executed, MarketOrderType, Order
+from app.models.price import Price
 from tests.conftest import get_exchange
 
 load_dotenv("configurations/test/.env-tests")
@@ -55,13 +56,13 @@ class TestCoinexApi:
     def test_create_sell_order(self, coinex_api, new_tables):
         fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
         fake_exchange.add_balance("ADA", Decimal(100))
-        order = coinex_api.create_sell_order("ADAUSDT", "50", "100")
+        order = coinex_api.create_sell_order("ADAUSDT", "50", buy_price="100", sell_price="120")
         db_order = Order.query_first_by_status("ADA1", OrderStatus.INITIAL)
         assert order.order_id == "1"
         assert db_order.order_id == "1"
         assert db_order.amount == Decimal("50")
-        assert db_order.buy_price is None
-        assert db_order.sell_price == Decimal("100")
+        assert db_order.buy_price == Decimal("100")
+        assert db_order.sell_price == Decimal("120")
         assert db_order.market == "ADAUSDT"
         assert db_order.type == OrderType.SELL
         assert db_order.orderStatus == OrderStatus.INITIAL
@@ -115,3 +116,22 @@ class TestCoinexApi:
             all_market_orders = Executed.query_by_day("ADA1", datetime.datetime(2024, 1, 1))
             assert len(all_market_orders) == 1
             assert all_market_orders[0].order_id == order.order_id
+
+    def test_join_orders(self, coinex_api, new_tables):
+        fake_exchange = get_exchange(reset=True, upload_basic_prices=True)
+        fake_exchange.add_balance("USDT", Decimal(100000))
+        fake_exchange.add_balance("ADA", Decimal(100))
+        order1 = coinex_api.create_sell_order("ADAUSDT", "10", buy_price="100", sell_price="150")
+        order2 = coinex_api.create_sell_order("ADAUSDT", "10", buy_price="120", sell_price="200")
+
+        open_orders = coinex_api.order_pending("ADAUSDT")
+        assert len(open_orders) == 2
+        price = Price(date=datetime.datetime.now(datetime.timezone.utc), price=112)
+        order = coinex_api.join_orders(market="ADAUSDT", price=price, order1=order1, order2=order2)
+        open_orders = coinex_api.order_pending("ADAUSDT")
+        assert len(open_orders) == 1
+        joined_order = open_orders[0]
+        assert order.order_id == joined_order.order_id
+        assert joined_order.amount == Decimal(20)
+        assert joined_order.buy_price == Decimal(110)
+        assert joined_order.sell_price == Decimal(175)

@@ -85,7 +85,7 @@ class BaseApi(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_sell_order(self, market: str, amount: Decimal, price: Decimal) -> Order:
+    def create_sell_order(self, market: str, amount: Decimal, buy_price: Decimal, sell_price: Decimal) -> Order:
         raise NotImplementedError
 
     @abstractmethod
@@ -94,6 +94,10 @@ class BaseApi(ABC):
 
     @abstractmethod
     def cancel_order(self, market: str, order_id: str) -> Order:
+        raise NotImplementedError
+
+    @abstractmethod
+    def join_orders(self, market: str, price: Price, order1: Order, order2: Order) -> Order:
         raise NotImplementedError
 
     @abstractmethod
