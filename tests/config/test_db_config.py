@@ -25,3 +25,12 @@ def test_add_bot_config(create_table):
     assert config2.pair == pair
     assert config2.exchange == exchange
     assert config2.min_buy_amount_usdt == min_buy_amount_usdt
+
+
+def test_add_decimals_config(create_table):
+    exchange = "coinex"
+    pairs = [{"BTCUSDT": {"amount": 6, "price": 2}}, {"ETHUSDT": {"amount": 4, "price": 3}}]
+    DbConfig.add_decimals_config(exchange, pairs=pairs)
+    config2 = DbConfig.from_db(f"decimals_{exchange}")
+    assert config2.values[0].BTCUSDT == {"amount": 6, "price": 2}
+    assert config2.values[1].ETHUSDT == {"amount": 4, "price": 3}

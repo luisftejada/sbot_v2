@@ -178,6 +178,17 @@ class DbConfig(Record):
         cls.save("N/A", config)
 
     @classmethod
+    def add_decimals_config(cls, exchange: str, pairs: list[dict[str, dict[str, int]]]):
+        key = f"decimals_{exchange}"
+        config = cls.from_db(key)
+        for pair in pairs:
+            for k, v in pair.items():
+                new_config_value = ConfigValue(name=k, value=v)
+                config.values.append(new_config_value)
+                config._dvalues[k] = v
+        cls.save("N/A", config)
+
+    @classmethod
     def update_config(cls, config: "DbConfig"):
         table = get_dynamodb().Table(cls._TABLE_NAME.get_default())
         item = json.loads(config.model_dump_json())
