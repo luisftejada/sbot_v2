@@ -14,7 +14,7 @@ from fastapi import FastAPI
 
 from app.api.client.coinex import CoinexClient
 from app.api.coinex import CoinexApi
-from app.config.config import Config
+from app.config.config import Config, DbConfig
 from app.models.enums import OrderStatus, OrderType
 from app.models.filled import DbFill
 from app.models.order import DbExecuted, Order
@@ -43,11 +43,11 @@ def create_config():
 
 @pytest.fixture(autouse=True)
 def new_tables():
-    for _cls in [Order, DbFill, DbExecuted]:
+    for _cls in [Order, DbFill, DbExecuted, DbConfig]:
         _cls.delete_table("ADA1")
         _cls.create_table("ADA1")
     yield
-    for _cls in [Order, DbFill, DbExecuted]:
+    for _cls in [Order, DbFill, DbExecuted, DbConfig]:
         _cls.delete_table("ADA1")
 
 

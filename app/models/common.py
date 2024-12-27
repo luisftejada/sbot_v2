@@ -106,7 +106,7 @@ class Record(DbBaseModel):
         return cls._TABLE_NAME.get_default()
 
     @classmethod
-    def get_full_table_name(cls, bot: str):
+    def get_full_table_name(cls, bot: str | None = None):
         return f"{bot}_{cls.table_name()}"
 
     @classmethod
@@ -164,28 +164,33 @@ class Record(DbBaseModel):
         return indexes
 
     @classmethod
-    def create_table(cls, bot: str) -> None:
+    def build_create_table_arguments(cls, table_name):
+        arguments = {
+            "TableName": table_name,
+            "KeySchema": [
+                {
+                    "AttributeName": cls.key_field(),
+                    "KeyType": "HASH",
+                },
+            ],
+            "AttributeDefinitions": cls.get_attribute_definitions(),
+            "BillingMode": "PAY_PER_REQUEST",
+        }
+        index_definitions = cls.get_index_definitions()
+        if index_definitions:
+            arguments["GlobalSecondaryIndexes"] = index_definitions
+        return arguments
+
+    @classmethod
+    def create_table(cls, bot: str | None = None) -> None:
         table_name = cls.get_full_table_name(bot)
         if table_name not in get_dynamodb().meta.client.list_tables().get("TableNames"):
-            create_table_arguments = {
-                "TableName": table_name,
-                "KeySchema": [
-                    {
-                        "AttributeName": cls.key_field(),
-                        "KeyType": "HASH",
-                    },
-                ],
-                "AttributeDefinitions": cls.get_attribute_definitions(),
-                "BillingMode": "PAY_PER_REQUEST",
-            }
-            index_definitions = cls.get_index_definitions()
-            if index_definitions:
-                create_table_arguments["GlobalSecondaryIndexes"] = index_definitions
+            create_table_arguments = cls.build_create_table_arguments(table_name)
             table = get_dynamodb().create_table(**create_table_arguments)
             table.meta.client.get_waiter("table_exists").wait(TableName=table_name)
 
     @classmethod
-    def delete_table(cls, bot: str) -> None:
+    def delete_table(cls, bot: str | None = None) -> None:
         table_name = cls.get_full_table_name(bot)
         if table_name in get_dynamodb().meta.client.list_tables().get("TableNames"):
             table = get_dynamodb().Table(table_name)

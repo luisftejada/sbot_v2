@@ -65,12 +65,20 @@ help:
 	@echo "  clean   - Limpia imágenes dangling (sin etiquetas)"
 	@echo "  remove  - Elimina la imagen Docker creada"
 
-dynamodb-start:
+localstack-start:
+	docker run -d -p 4566:4566 -p 4571:4571 --name localstack localstack/localstack
+
+aws-start:
+	docker start localstack
+	sleep 1
+	aws sns create-topic --name prices --endpoint http://localhost:4566
 	cd "/home/$(USER)/datos/dev/dynamodb"
 	screen -d -m -S dynamodb
 	sleep 1
 	echo "Starting DynamoDB"
 	screen -S dynamodb -X stuff '/home/luis/datos/dev/dynamodb/start.sh\n'
 
-dynamodb-stop:
+
+aws-stop:
+	docker stop localstack
 	screen -X -S dynamodb kill
