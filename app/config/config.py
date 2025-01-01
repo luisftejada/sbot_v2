@@ -75,6 +75,24 @@ class Config(BaseModel):
     def currency_to(self):
         return self._currency_to
 
+    @classmethod
+    def load_config_from_db_config(cls, label: str) -> "Config":
+        db_config = DbConfig.from_db(f"bot_{label}")
+        exchange = db_config.exchange
+        decimals_config = DbConfig.from_db(f"decimals_{exchange}")
+        decimals = read_decimals_from_db_config(decimals_config)
+        secrets = DbConfig.from_db("secrets")
+        client = get_client_credentials_from_db(secrets, label, exchange)
+        config = cls(
+            label=label,
+            exchange=exchange,
+            pair=db_config.pair,
+            decimals=decimals,
+            client=client,
+            min_buy_amount_usdt=db_config.min_buy_amount_usdt,
+        )
+        return config
+
     # Función para leer el archivo YAML y parsearlo a la clase Pydantic
     @classmethod
     def read_config_from_yaml(cls, file_path: str) -> "Config":
@@ -96,6 +114,13 @@ def read_decimals_from_yaml(file_path: str) -> MarketDecimals:
     with open(file_path, "r") as file:
         data = yaml.safe_load(file)
         return MarketDecimals(**data)
+
+
+def read_decimals_from_db_config(db_config: "DbConfig") -> ExchangeDecimals:
+    pairs = {}
+    for value in db_config.values:
+        pairs[value.name] = value.value
+    return ExchangeDecimals(pairs=pairs)
 
 
 def get_decimals_file(data: dict) -> str:
@@ -121,6 +146,12 @@ def get_client_credentials(exchange: str, label: str) -> ClientCredentials:
     return ClientCredentials(key=key, secret=secret)
 
 
+def get_client_credentials_from_db(secrets: "DbConfig", label: str, exchange: str) -> ClientCredentials:
+    key = secrets.get_secret(f"{label}-{exchange}-access-key")
+    secret = secrets.get_secret(f"{label}-{exchange}-secret-key")
+    return ClientCredentials(key=key, secret=secret)
+
+
 class ConfigValue(BaseModel):
     name: str
     value: Any
@@ -131,6 +162,10 @@ class ConfigValue(BaseModel):
 
     def add_private_attribute(self, name: str, value: Any):
         object.__setattr__(self, name, value)
+
+
+class DbConfigNotFound(RuntimeError):
+    pass
 
 
 class DbConfig(Record):
@@ -150,17 +185,35 @@ class DbConfig(Record):
         for value in self.values:
             self._dvalues[value.name] = value.value
             if value.name in self.__dict__:
-                raise RuntimeError(f"Attribute {value.name} already exists in {self.__class__.__name__}")
-            self.add_private_attribute(value.name, value.value)
+                print(f"Attribute {value.name} already exists in {self.__class__.__name__}")
+                print(f"original={self.__dict__[value.name]}, new={value.value}")
+                self.__dict__[value.name] = value.value
+            else:
+                self.add_private_attribute(value.name, value.value)
 
     @classmethod
-    def from_db(cls, key: str) -> "DbConfig":
+    def from_db(cls, key: str, fail_if_not_found: bool = False) -> "DbConfig":
         config = get_dynamodb().Table(cls._TABLE_NAME.get_default()).get_item(Key={"key": key}).get("Item")
         if config:
             values = [ConfigValue(**value) for value in config.get("values", [])]
         else:
+            if fail_if_not_found:
+                raise DbConfigNotFound(f"can't find config for {key}")
             values = []
         return cls(key=key, values=values)
+
+    @classmethod
+    def get_all_bots(cls):
+        bots = []
+        table = get_dynamodb().Table(cls._TABLE_NAME.get_default())
+        response = table.scan(
+            FilterExpression="begins_with(#key, :prefix)",
+            ExpressionAttributeNames={"#key": "key"},
+            ExpressionAttributeValues={":prefix": "bot_"},
+        )
+        for item in response["Items"]:
+            bots.append(cls.from_db(item["key"]))
+        return bots
 
     @classmethod
     def get_full_table_name(cls, bot):
@@ -174,18 +227,71 @@ class DbConfig(Record):
             new_config_value = ConfigValue(name=k, value=v)
             config.values.append(new_config_value)
             config._dvalues[k] = v
-
         cls.save("N/A", config)
 
     @classmethod
-    def add_decimals_config(cls, exchange: str, pairs: list[dict[str, dict[str, int]]]):
+    def add_bot_config(cls, label: str, key: str, value: Any):
+        config = cls.from_db(f"bot_{label}")
+        new_config_value = ConfigValue(name=key, value=value)
+        if key in config._dvalues:
+            config.values = [value for value in config.values if value.name != key] + [new_config_value]
+        else:
+            config.values.append(new_config_value)
+        config._dvalues[key] = value
+        cls.save("N/A", config)
+
+    @classmethod
+    def delete_bot_config(cls, label: str, key: str):
+        config = cls.from_db(f"bot_{label}")
+        config.values = [value for value in config.values if value.name != key]
+        cls.save("N/A", config)
+
+    @classmethod
+    def delete_bot(cls, label: str):
+        key = f"bot_{label}"
+        cls.delete("N/A", key)
+
+    @classmethod
+    def add_decimals_config(cls, exchange: str, pairs: list[dict[str, dict[str, str]]]):
         key = f"decimals_{exchange}"
         config = cls.from_db(key)
         for pair in pairs:
             for k, v in pair.items():
                 new_config_value = ConfigValue(name=k, value=v)
-                config.values.append(new_config_value)
+                if k in config._dvalues:
+                    config.values = [value for value in config.values if value.name != k] + [new_config_value]
+                else:
+                    config.values.append(new_config_value)
                 config._dvalues[k] = v
+        cls.save("N/A", config)
+
+    @classmethod
+    def delete_decimals_config(cls, exchange: str, market: str):
+        key = f"decimals_{exchange}"
+        config = cls.from_db(key)
+        config.values = [value for value in config.values if value.name != market]
+        cls.save("N/A", config)
+
+    @classmethod
+    def add_secrets(cls, secrets: list[dict[str, str]]):
+        key = "secrets"
+        config = cls.from_db(key)
+        for secret in secrets:
+            for k, v in secret.items():
+                new_config_value = ConfigValue(name=k, value=v)
+                if k in config._dvalues:
+                    config.values = [value for value in config.values if value.name != k] + [new_config_value]
+                else:
+                    config.values.append(new_config_value)
+        cls.save("N/A", config)
+
+    def get_secret(self, key: str):
+        return self._dvalues.get(key, None)
+
+    @classmethod
+    def delete_secret(cls, key: str):
+        config = cls.from_db("secrets")
+        config.values = [value for value in config.values if value.name != key]
         cls.save("N/A", config)
 
     @classmethod

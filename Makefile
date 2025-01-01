@@ -70,7 +70,7 @@ localstack-start:
 
 aws-start:
 	docker start localstack
-	sleep 1
+	sleep 2
 	aws sns create-topic --name prices --endpoint http://localhost:4566
 	cd "/home/$(USER)/datos/dev/dynamodb"
 	screen -d -m -S dynamodb

@@ -43,11 +43,11 @@ def create_config():
 
 @pytest.fixture(autouse=True)
 def new_tables():
-    for _cls in [Order, DbFill, DbExecuted, DbConfig]:
+    for _cls in [Order, DbFill, DbExecuted]:
         _cls.delete_table("ADA1")
         _cls.create_table("ADA1")
     yield
-    for _cls in [Order, DbFill, DbExecuted, DbConfig]:
+    for _cls in [Order, DbFill, DbExecuted]:
         _cls.delete_table("ADA1")
 
 
@@ -109,6 +109,23 @@ def start_test_server():
 
     # shutdown the fake server
     requests.get(f"{CoinexClientTest.BASE_URL}shutdown")
+
+
+@pytest.fixture()
+def load_db_config():
+    DbConfig.create_table()
+    DbConfig.add_bot("ADA1", pair="ADA/USDT", exchange="coinex", min_buy_amount_usdt=200)
+    DbConfig.add_decimals_config(
+        "coinex",
+        pairs=[
+            {"ADAUSDT": {"amount": 6, "price": 4}},
+            {"BTCUSDT": {"amount": 8, "price": 8}},
+            {"USDTUSDC": {"amount": 2, "price": 4}},
+        ],
+    )
+    DbConfig.add_secrets([{"ADA1-coinex-access-key": "test-key"}, {"ADA1-coinex-secret-key": "test-secret-key"}])
+    yield
+    DbConfig.delete_table()
 
 
 @app.get("/healthcheck")
